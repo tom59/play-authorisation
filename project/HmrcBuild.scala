@@ -11,6 +11,8 @@ object HmrcBuild extends Build {
 
   val appName = "play-authorisation"
 
+  resolvers += Resolver.bintrayRepo("jcenter", "releases")
+
   lazy val playAuthorisation = (project in file("."))
     .enablePlugins(SbtAutoBuildPlugin, SbtGitVersioning)
     .settings(
