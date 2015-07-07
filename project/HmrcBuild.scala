@@ -12,6 +12,7 @@ object HmrcBuild extends Build {
   val appName = "play-authorisation"
 
   resolvers += Resolver.bintrayRepo("jcenter", "releases")
+  resolvers += Resolver.bintrayRepo("hmrc", "releases")
 
   lazy val playAuthorisation = (project in file("."))
     .enablePlugins(SbtAutoBuildPlugin, SbtGitVersioning)
@@ -25,8 +26,7 @@ object HmrcBuild extends Build {
         Compile.domain,
         Test.scalaTest,
         Test.pegdown,
-        Test.playTest,
-        Test.httpVerbs
+        Test.playTest
       ),
       Developers()
     )
@@ -37,7 +37,7 @@ private object BuildDependencies {
   import play.PlayImport._
   import play.core.PlayVersion
 
-  val httpVerbsVersion = "1.5.0"
+  val httpVerbsVersion = "1.8.0"
 
   object Compile {
     val playFramework = "com.typesafe.play" %% "play" % PlayVersion.current
@@ -50,7 +50,7 @@ private object BuildDependencies {
     val scalaTest = "org.scalatest" %% "scalatest" % "2.2.4" % scope
     val pegdown = "org.pegdown" % "pegdown" % "1.5.0" % scope
     val playTest = "com.typesafe.play" %% "play-test" % PlayVersion.current % scope
-    val httpVerbs = "uk.gov.hmrc" %% "http-verbs" % httpVerbsVersion % scope classifier "tests"
+    val httpVerbs = "uk.gov.hmrc" %% "http-verbs" % httpVerbsVersion % scope
   }
 
   object Test extends Test("test")
