@@ -26,7 +26,7 @@ import play.api.mvc.Results._
 import play.api.mvc.{AnyContentAsEmpty, RequestHeader}
 import play.api.test.{FakeHeaders, FakeRequest}
 import uk.gov.hmrc.play.auth.controllers.{AuthConfig, LevelOfAssurance}
-import uk.gov.hmrc.play.auth.microservice.connectors.{AuthConnector, AuthRequestParameters, AuthorisationResult}
+import uk.gov.hmrc.play.auth.microservice.connectors.{Authorised, AuthConnector, AuthRequestParameters, AuthorisationResult}
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -34,6 +34,7 @@ import scala.concurrent.duration._
 class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with MockitoSugar with ScalaFutures {
 
 
+  private trait Setup {
   val levelOfAssurance = LevelOfAssurance.LOA_1_5
   val configWithLoa = AuthConfig(levelOfAssurance = levelOfAssurance)
   val authConnectorMock = mock[AuthConnector]
@@ -43,14 +44,16 @@ class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with Moc
 
     override def authConfig(rh: RequestHeader): Option[AuthConfig] = Some(configWithLoa)
   }
+}
 
   "AuthorisationFilter" should {
-    "add the levelOfAssurance when calling auth" in {
+
+    "add the levelOfAssurance when calling auth" in new Setup {
 
       import akka.util.Timeout
       implicit val timeout = Timeout(3 seconds)
 
-      when(authConnectorMock.authorise(Matchers.any(), Matchers.any())(Matchers.any())).thenReturn(Future.successful(AuthorisationResult(true, false)))
+      when(authConnectorMock.authorise(Matchers.any(), Matchers.any())(Matchers.any())).thenReturn(Future.successful(Authorised(false)))
       val req = FakeRequest("GET", "/myregime/myId", FakeHeaders(), AnyContentAsEmpty, tags = Map(Routes.ROUTE_VERB-> "GET"))
 
       val result = filter((next: RequestHeader) => Future.successful(Ok("All is good")))(req)
@@ -61,5 +64,11 @@ class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with Moc
       verify(authConnectorMock).authorise(Matchers.any(),captor.capture())(Matchers.any())
       captor.getValue().levelOfAssurance shouldBe levelOfAssurance.toString
     }
+
+    "throw UnauthorizedException if auth returns NotAuthenticated" in new Setup {}
+
+    "throw ForbiddenException if auth returns Forbidden" in new Setup {}
+
+    "let the request though if auth returns Authentiated(_)" in new Setup {}
   }
 }

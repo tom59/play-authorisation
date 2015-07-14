@@ -20,8 +20,8 @@ import play.api.Logger
 import play.api.libs.ws.WSResponse
 import uk.gov.hmrc.play.audit.http.HeaderCarrier
 import uk.gov.hmrc.play.connectors.Connector
-import uk.gov.hmrc.play.http.HeaderNames
 import uk.gov.hmrc.play.http.logging.ConnectionTracing
+import uk.gov.hmrc.play.http.{HeaderNames, HttpGet}
 
 import scala.concurrent.Future
 
@@ -80,8 +80,13 @@ case class AuthRequestParameters(levelOfAssurance: String,
   }
 }
 
-case class AuthorisationResult(isAuthorised: Boolean, isSurrogate: Boolean)
+trait AuthorisationResult
 
+case object NotAuthenticated extends AuthorisationResult
+
+case object Forbidden extends AuthorisationResult
+
+case class Authorised(isSurrogate: Boolean) extends AuthorisationResult
 
 trait AuthConnector extends Connector with ConnectionTracing {
   import uk.gov.hmrc.play.http.logging.MdcLoggingExecutionContext._
@@ -93,9 +98,12 @@ trait AuthConnector extends Connector with ConnectionTracing {
     callAuth(url).map {
       response =>
         response.status match {
-          case 200 => AuthorisationResult(isAuthorised = true, isSurrogate = isSurrogate(response))
-          case 401 => AuthorisationResult(isAuthorised = false, isSurrogate = false)
-          case status => Logger.error(s"Unexpected status $status returned from auth call to $url"); AuthorisationResult(isAuthorised = false, isSurrogate = false)
+          case 200 => Authorised(isSurrogate(response))
+          case 401 => NotAuthenticated
+          case 403 => Forbidden
+          case status =>
+            Logger.error(s"Unexpected status $status returned from auth call to $url")
+            NotAuthenticated
         }
     }
   }

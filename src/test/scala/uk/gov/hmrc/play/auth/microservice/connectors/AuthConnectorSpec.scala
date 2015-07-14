@@ -16,15 +16,19 @@
 
 package uk.gov.hmrc.play.auth.microservice.connectors
 
+import org.scalatest.concurrent.ScalaFutures
+import org.scalatest.mock.MockitoSugar
 import org.scalatest.{Matchers, WordSpecLike}
 import play.api.libs.json.JsValue
 import play.api.libs.ws.{WSCookie, WSResponse}
 import uk.gov.hmrc.play.audit.http.HeaderCarrier
+import uk.gov.hmrc.play.http.{HeaderNames, HttpResponse}
+import org.mockito.Mockito._
 
 import scala.concurrent.Future
 import scala.xml.Elem
 
-class AuthConnectorSpec extends WordSpecLike with Matchers {
+class AuthConnectorSpec extends WordSpecLike with Matchers with MockitoSugar with ScalaFutures {
   val stubAuthConnector = new AuthConnector {
     override def authBaseUrl = ???
 
@@ -102,6 +106,20 @@ class AuthConnectorSpec extends WordSpecLike with Matchers {
   }
 
 
+  private trait SetupForAuthorisation {
+    val resourceToAuthorise = ResourceToAuthorise(HttpVerb("GET"), Regime("foo"), AccountId("testid"))
+
+    val authResponse : WSResponse = mock[WSResponse]
+    val authConnector = new AuthConnector {
+
+      override def authBaseUrl = "authBase"
+
+      override protected def callAuth(url: String)(implicit hc: HeaderCarrier): Future[WSResponse] = {
+        Future.successful(authResponse)
+      }
+    }
+
+  }
 
   "AuthConnector.authorise" should {
     val authConnector = new AuthConnector {
@@ -125,6 +143,45 @@ class AuthConnectorSpec extends WordSpecLike with Matchers {
       val resourceToAuthorise = ResourceToAuthorise(HttpVerb("GET"), Regime("foo"))
       authConnector.authorise(resourceToAuthorise, AuthRequestParameters(loa))(new HeaderCarrier)
       authConnector.calledUrl shouldBe Some(s"authBase/authorise/read/foo?levelOfAssurance=$loa")
+    }
+
+    "return Authorised(true) when auth response is 200 and request header contains surrogate " in new SetupForAuthorisation {
+      when(authResponse.status).thenReturn(200)
+      when(authResponse.header(HeaderNames.surrogate)).thenReturn(Some("true"))
+
+      val result = authConnector.authorise(resourceToAuthorise, AuthRequestParameters(loa))(new HeaderCarrier).futureValue
+      result shouldBe Authorised(true)
+    }
+
+    "return Authorised(true) when auth response is 200 and request header does not contain surrogate" in new SetupForAuthorisation {
+      when(authResponse.status).thenReturn(200)
+      when(authResponse.header(HeaderNames.surrogate)).thenReturn(None)
+
+      val result = authConnector.authorise(resourceToAuthorise, AuthRequestParameters(loa))(new HeaderCarrier).futureValue
+      result shouldBe Authorised(false)
+    }
+
+    "return NotAuthenticated when auth response is 401" in new SetupForAuthorisation {
+      when(authResponse.status).thenReturn(401)
+
+      val result = authConnector.authorise(resourceToAuthorise, AuthRequestParameters(loa))(new HeaderCarrier).futureValue
+      result shouldBe NotAuthenticated
+    }
+
+    "return Forbidden when auth response is 403" in new SetupForAuthorisation {
+      when(authResponse.status).thenReturn(403)
+
+      val result = authConnector.authorise(resourceToAuthorise, AuthRequestParameters(loa))(new HeaderCarrier).futureValue
+      result shouldBe Forbidden
+
+    }
+
+    "return NotAuthenticated when auth response is any other status code" in new SetupForAuthorisation {
+      when(authResponse.status).thenReturn(500)
+
+      val result = authConnector.authorise(resourceToAuthorise, AuthRequestParameters(loa))(new HeaderCarrier).futureValue
+      result shouldBe NotAuthenticated
+
     }
   }
 
