@@ -23,40 +23,45 @@ import org.scalatest.mock.MockitoSugar
 import org.scalatest.{Matchers => MatchersResults, WordSpecLike}
 import play.api.Routes
 import play.api.mvc.Results._
-import play.api.mvc.{AnyContentAsEmpty, RequestHeader}
+import play.api.mvc.{AnyContentAsEmpty, RequestHeader, Result}
 import play.api.test.{FakeHeaders, FakeRequest}
 import uk.gov.hmrc.play.auth.controllers.{AuthConfig, LevelOfAssurance}
 import uk.gov.hmrc.play.auth.microservice.connectors.{Authorised, AuthConnector, AuthRequestParameters, AuthorisationResult}
-
 import scala.concurrent.Future
 import scala.concurrent.duration._
+import uk.gov.hmrc.play.auth.microservice.connectors.{Authorised, NotAuthenticated, Forbidden}
+import uk.gov.hmrc.play.http.{UnauthorizedException, ForbiddenException}
+
 
 class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with MockitoSugar with ScalaFutures {
 
 
   private trait Setup {
-  val levelOfAssurance = LevelOfAssurance.LOA_1_5
-  val configWithLoa = AuthConfig(levelOfAssurance = levelOfAssurance)
-  val authConnectorMock = mock[AuthConnector]
+    import akka.util.Timeout
+    implicit val timeout = Timeout(3 seconds)
+      
+    val levelOfAssurance = LevelOfAssurance.LOA_1_5
+    val configWithLoa = AuthConfig(levelOfAssurance = levelOfAssurance)
+    val authConnectorMock = mock[AuthConnector]
+  
+    val filter = new AuthorisationFilter {
+      override def authConnector: AuthConnector = authConnectorMock
+  
+      override def authConfig(rh: RequestHeader): Option[AuthConfig] = Some(configWithLoa)
+    }
+    
+    def filterRequest(connectorResult: Future[AuthorisationResult]): Future[Result] = {
+      when(authConnectorMock.authorise(Matchers.any(), Matchers.any())(Matchers.any())).thenReturn(connectorResult)
+      val req = FakeRequest("GET", "/myregime/myId", FakeHeaders(), AnyContentAsEmpty, tags = Map(Routes.ROUTE_VERB-> "GET"))
 
-  val filter = new AuthorisationFilter {
-    override def authConnector: AuthConnector = authConnectorMock
-
-    override def authConfig(rh: RequestHeader): Option[AuthConfig] = Some(configWithLoa)
+      filter((next: RequestHeader) => Future.successful(Ok("All is good")))(req)
+    }
   }
-}
 
   "AuthorisationFilter" should {
 
     "add the levelOfAssurance when calling auth" in new Setup {
-
-      import akka.util.Timeout
-      implicit val timeout = Timeout(3 seconds)
-
-      when(authConnectorMock.authorise(Matchers.any(), Matchers.any())(Matchers.any())).thenReturn(Future.successful(Authorised(false)))
-      val req = FakeRequest("GET", "/myregime/myId", FakeHeaders(), AnyContentAsEmpty, tags = Map(Routes.ROUTE_VERB-> "GET"))
-
-      val result = filter((next: RequestHeader) => Future.successful(Ok("All is good")))(req)
+      val result = filterRequest(Future.successful(Authorised(false)))
       play.api.test.Helpers.status(result) shouldBe 200
       play.api.test.Helpers.contentAsString(result) shouldBe "All is good"
 
@@ -65,10 +70,19 @@ class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with Moc
       captor.getValue().levelOfAssurance shouldBe levelOfAssurance.toString
     }
 
-    "throw UnauthorizedException if auth returns NotAuthenticated" in new Setup {}
+    "throw UnauthorizedException if auth returns NotAuthenticated" in new Setup {
+      val result = filterRequest(Future.successful(NotAuthenticated))
+      result.failed.futureValue shouldBe a [UnauthorizedException]
+    }
 
-    "throw ForbiddenException if auth returns Forbidden" in new Setup {}
+    "throw ForbiddenException if auth returns Forbidden" in new Setup {
+      val result = filterRequest(Future.successful(Forbidden))
+      result.failed.futureValue shouldBe a [ForbiddenException]
+    }
 
-    "let the request though if auth returns Authentiated(_)" in new Setup {}
+    "let the request though if auth returns Authentiated(_)" in new Setup {
+      val result = filterRequest(Future.successful(Authorised(false)))
+      play.api.test.Helpers.status(result) shouldBe 200
+    }
   }
 }

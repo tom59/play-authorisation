@@ -80,7 +80,7 @@ case class AuthRequestParameters(levelOfAssurance: String,
   }
 }
 
-trait AuthorisationResult
+sealed trait AuthorisationResult
 
 case object NotAuthenticated extends AuthorisationResult
 

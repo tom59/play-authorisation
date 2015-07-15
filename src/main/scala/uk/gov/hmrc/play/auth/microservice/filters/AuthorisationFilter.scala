@@ -23,8 +23,7 @@ import uk.gov.hmrc.play.auth.controllers.AuthConfig
 import uk.gov.hmrc.play.auth.microservice.connectors._
 import uk.gov.hmrc.play.http.logging.LoggingDetails
 import uk.gov.hmrc.play.http.logging.MdcLoggingExecutionContext._
-import uk.gov.hmrc.play.http.{HeaderNames, UnauthorizedException}
-
+import uk.gov.hmrc.play.http.{HeaderNames, UnauthorizedException, ForbiddenException}
 import scala.concurrent.Future
 
 trait AuthorisationFilter extends Filter {
@@ -39,8 +38,9 @@ trait AuthorisationFilter extends Filter {
     authConfig(rh) match {
       case Some(authConfig) => isAuthorised(rh, authConfig).flatMap {
         case Authorised(true) => next(appendSurrogateHeader(rh))
-        case Authorised(_) => next(rh)
-        case _ => throw new UnauthorizedException(s"Authorisation refused for access to ${rh.method} ${rh.uri}")
+        case Authorised(_)    => next(rh)
+        case NotAuthenticated => throw new UnauthorizedException(s"Authorisation refused for access to ${rh.method} ${rh.uri}")
+        case Forbidden        => throw new ForbiddenException(s"Authorisation refused for access to ${rh.method} ${rh.uri}")
       }
       case _ => next(rh)
     }
