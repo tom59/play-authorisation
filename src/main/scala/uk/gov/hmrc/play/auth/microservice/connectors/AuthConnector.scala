@@ -16,12 +16,12 @@
 
 package uk.gov.hmrc.play.auth.microservice.connectors
 
-import play.api.Logger
+import play.api.libs.iteratee.Enumerator
 import play.api.libs.ws.WSResponse
+import play.api.mvc.{ResponseHeader, Result}
 import uk.gov.hmrc.play.audit.http.HeaderCarrier
 import uk.gov.hmrc.play.connectors.Connector
 import uk.gov.hmrc.play.http.logging.ConnectionTracing
-import uk.gov.hmrc.play.http.{HeaderNames, HttpGet}
 
 import scala.concurrent.Future
 
@@ -80,44 +80,20 @@ case class AuthRequestParameters(levelOfAssurance: String,
   }
 }
 
-sealed trait AuthorisationResult
-
-case class NotAuthenticated(error: Option[String]=None, description: Option[String]=None) extends AuthorisationResult
-
-case object Forbidden extends AuthorisationResult
-
-case class Authorised(isSurrogate: Boolean) extends AuthorisationResult
-
 trait AuthConnector extends Connector with ConnectionTracing {
   import uk.gov.hmrc.play.http.logging.MdcLoggingExecutionContext._
 
   def authBaseUrl: String
 
-  def authorise(resource: ResourceToAuthorise, authRequestParameters: AuthRequestParameters)(implicit hc: HeaderCarrier): Future[AuthorisationResult] = {
+  def authorise(resource: ResourceToAuthorise, authRequestParameters: AuthRequestParameters)(implicit hc: HeaderCarrier): Future[Result] = {
     val url = resource.buildUrl(authBaseUrl, authRequestParameters)
-    callAuth(url).map {
-      response =>
-        response.status match {
-          case 200 => Authorised(isSurrogate(response))
-          case 401 => withFailureReason(response)
-          case 403 => Forbidden
-          case status =>
-            Logger.error(s"Unexpected status $status returned from auth call to $url")
-            NotAuthenticated()
-        }
+    callAuth(url) map { response =>
+      val headers = response.allHeaders map {
+        h => (h._1, h._2.head)
+      }
+      Result(ResponseHeader(response.status, headers), Enumerator(Array()))
     }
   }
-
-  private def withFailureReason(response : WSResponse) = {
-    val www= response.header("WWW-Authenticate")
-    val regex = """.*error="(.*)",\s*error_description="(.*)"""".r
-    www.fold(NotAuthenticated()) {
-        case regex(error, desc) => NotAuthenticated(Some(error), Some(desc))
-        case _ =>   NotAuthenticated()
-    }
-  }
-
-  private[connectors] def isSurrogate(response: WSResponse) = response.header(HeaderNames.surrogate).contains("true")
 
   protected def callAuth(url: String)(implicit hc: HeaderCarrier): Future[WSResponse] = withTracing("GET", url) {
     buildRequest(url).get()
