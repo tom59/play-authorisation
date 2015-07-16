@@ -82,7 +82,7 @@ case class AuthRequestParameters(levelOfAssurance: String,
 
 sealed trait AuthorisationResult
 
-case object NotAuthenticated extends AuthorisationResult
+case class NotAuthenticated(error: Option[String]=None, description: Option[String]=None) extends AuthorisationResult
 
 case object Forbidden extends AuthorisationResult
 
@@ -99,12 +99,21 @@ trait AuthConnector extends Connector with ConnectionTracing {
       response =>
         response.status match {
           case 200 => Authorised(isSurrogate(response))
-          case 401 => NotAuthenticated
+          case 401 => withFailureReason(response)
           case 403 => Forbidden
           case status =>
             Logger.error(s"Unexpected status $status returned from auth call to $url")
-            NotAuthenticated
+            NotAuthenticated()
         }
+    }
+  }
+
+  private def withFailureReason(response : WSResponse) = {
+    val www= response.header("WWW-Authenticate")
+    val regex = """.*error="(.*)",\s*error_description="(.*)"""".r
+    www.fold(NotAuthenticated()) {
+        case regex(error, desc) => NotAuthenticated(Some(error), Some(desc))
+        case _ =>   NotAuthenticated()
     }
   }
 

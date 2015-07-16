@@ -39,7 +39,7 @@ trait AuthorisationFilter extends Filter {
       case Some(authConfig) => isAuthorised(rh, authConfig).flatMap {
         case Authorised(true) => next(appendSurrogateHeader(rh))
         case Authorised(_)    => next(rh)
-        case NotAuthenticated => throw new UnauthorizedException(s"Authorisation refused for access to ${rh.method} ${rh.uri}")
+        case _ : NotAuthenticated => throw new UnauthorizedException(s"Authorisation refused for access to ${rh.method} ${rh.uri}")
         case Forbidden        => throw new ForbiddenException(s"Authorisation refused for access to ${rh.method} ${rh.uri}")
       }
       case _ => next(rh)
@@ -66,7 +66,7 @@ trait AuthorisationFilter extends Filter {
 
       } yield authConnector.authorise(resource, AuthRequestParameters(authConfig.levelOfAssurance.toString,authConfig.agentRole, authConfig.delegatedAuthRule))
 
-    result.map(_.getOrElse(NotAuthenticated))
+    result.map(_.getOrElse(NotAuthenticated()))
   }
 
   def extractResource(pathString: String, verb: HttpVerb, authConfig: AuthConfig): Option[ResourceToAuthorise] =

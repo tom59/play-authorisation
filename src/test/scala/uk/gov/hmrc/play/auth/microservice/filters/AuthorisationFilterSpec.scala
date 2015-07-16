@@ -70,8 +70,8 @@ class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with Moc
       captor.getValue().levelOfAssurance shouldBe levelOfAssurance.toString
     }
 
-    "throw UnauthorizedException if auth returns NotAuthenticated" in new Setup {
-      val result = filterRequest(Future.successful(NotAuthenticated))
+    "return 401 if auth returns NotAuthenticated" in new Setup {
+      val result = filterRequest(Future.successful(NotAuthenticated()))
       result.failed.futureValue shouldBe a [UnauthorizedException]
     }
 

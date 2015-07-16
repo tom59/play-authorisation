@@ -163,9 +163,10 @@ class AuthConnectorSpec extends WordSpecLike with Matchers with MockitoSugar wit
 
     "return NotAuthenticated when auth response is 401" in new SetupForAuthorisation {
       when(authResponse.status).thenReturn(401)
+      when(authResponse.header("WWW-Authenticate")).thenReturn(None)
 
       val result = authConnector.authorise(resourceToAuthorise, AuthRequestParameters(loa))(new HeaderCarrier).futureValue
-      result shouldBe NotAuthenticated
+      result shouldBe NotAuthenticated()
     }
 
     "return Forbidden when auth response is 403" in new SetupForAuthorisation {
@@ -180,8 +181,16 @@ class AuthConnectorSpec extends WordSpecLike with Matchers with MockitoSugar wit
       when(authResponse.status).thenReturn(500)
 
       val result = authConnector.authorise(resourceToAuthorise, AuthRequestParameters(loa))(new HeaderCarrier).futureValue
-      result shouldBe NotAuthenticated
+      result shouldBe NotAuthenticated()
 
+    }
+
+    "return NotAuthenticated with the failure details" in new SetupForAuthorisation {
+      when(authResponse.status).thenReturn(401)
+      when(authResponse.header("WWW-Authenticate")).thenReturn(Some("""Bearer realm="example", error="invalid_token", error_description="The access token expired""""))
+
+      val result = authConnector.authorise(resourceToAuthorise, AuthRequestParameters(loa))(new HeaderCarrier).futureValue
+      result shouldBe NotAuthenticated(Some("invalid_token"), Some("The access token expired"))
     }
   }
 
