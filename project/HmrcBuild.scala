@@ -23,7 +23,6 @@ object HmrcBuild extends Build {
         Compile.playFramework,
         Compile.playWS,
         Compile.httpVerbs,
-        Compile.domain,
         Test.scalaTest,
         Test.pegdown,
         Test.playTest
@@ -43,7 +42,6 @@ private object BuildDependencies {
     val playFramework = "com.typesafe.play" %% "play" % PlayVersion.current
     val playWS = ws % "provided"
     val httpVerbs = "uk.gov.hmrc" %% "http-verbs" % httpVerbsVersion
-    val domain = "uk.gov.hmrc" %% "domain" % "2.6.0"
   }
 
   sealed abstract class Test(scope: String) {
