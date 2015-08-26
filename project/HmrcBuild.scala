@@ -19,10 +19,12 @@ object HmrcBuild extends Build {
     .settings(
       name := appName,
       targetJvm := "jvm-1.7",
+      scalaVersion := "2.11.7",
       libraryDependencies ++= Seq(
         Compile.playFramework,
         Compile.playWS,
         Compile.httpVerbs,
+        Compile.ficus,
         Test.scalaTest,
         Test.pegdown,
         Test.playTest
@@ -36,12 +38,13 @@ private object BuildDependencies {
   import play.PlayImport._
   import play.core.PlayVersion
 
-  val httpVerbsVersion = "1.8.0"
+  val httpVerbsVersion = "1.10.0"
 
   object Compile {
-    val playFramework = "com.typesafe.play" %% "play" % PlayVersion.current
+    val playFramework = "com.typesafe.play" %% "play" % PlayVersion.current % "provided"
     val playWS = ws % "provided"
-    val httpVerbs = "uk.gov.hmrc" %% "http-verbs" % httpVerbsVersion
+    val httpVerbs = "uk.gov.hmrc" %% "http-verbs" % httpVerbsVersion % "provided"
+    val ficus = "net.ceedubs" %% "ficus" % "1.1.1"
   }
 
   sealed abstract class Test(scope: String) {

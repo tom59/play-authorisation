@@ -34,7 +34,7 @@ trait AuthorisationFilter extends Filter {
   def authConfig(rh: RequestHeader): Option[AuthConfig]
 
   def apply(next: (RequestHeader) => Future[Result])(rh: RequestHeader): Future[Result] = {
-    implicit val hc = HeaderCarrier.fromHeaders(rh.headers)
+    implicit val hc = HeaderCarrier.fromHeadersAndSession(rh.headers)
 
     authConfig(rh) match {
       case Some(authConfig) => isAuthorised(rh, authConfig).flatMap {
