@@ -16,50 +16,158 @@
 
 package uk.gov.hmrc.play.auth.microservice.filters
 
-import org.mockito.Mockito.{verify, when}
-import org.mockito.{ArgumentCaptor, Matchers}
+import _root_.play.api.Routes._
+import com.typesafe.config.{Config, ConfigFactory}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.mock.MockitoSugar
-import org.scalatest.{Matchers => MatchersResults, WordSpecLike}
-import play.api.Routes
-import play.api.mvc.Results._
-import play.api.mvc.{AnyContentAsEmpty, RequestHeader}
+import org.scalatest.{WordSpecLike, Matchers => MatchersResults}
+import play.api.libs.json.JsValue
+import play.api.libs.ws.{WSCookie, WSResponse}
+import play.api.mvc.{RequestHeader, Results}
 import play.api.test.{FakeHeaders, FakeRequest}
-import uk.gov.hmrc.play.auth.controllers.{AuthConfig, LevelOfAssurance}
-import uk.gov.hmrc.play.auth.microservice.connectors.{AuthConnector, AuthRequestParameters, AuthorisationResult}
+import uk.gov.hmrc.play.audit.http.HeaderCarrier
+import uk.gov.hmrc.play.auth.controllers.{AuthConfig, AuthParamsControllerConfig, LevelOfAssurance}
+import uk.gov.hmrc.play.auth.microservice.connectors._
 
+import scala.collection.JavaConversions._
 import scala.concurrent.Future
-import scala.concurrent.duration._
+import scala.xml.Elem
 
 class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with MockitoSugar with ScalaFutures {
 
+  "AuthorisationFilter.extractAccountAndAccountId with default AuthConfig" should {
+    val defaultAuthConfig = AuthConfig(levelOfAssurance = LevelOfAssurance.LOA_2)
 
-  val levelOfAssurance = LevelOfAssurance.LOA_1_5
-  val configWithLoa = AuthConfig(levelOfAssurance = levelOfAssurance)
-  val authConnectorMock = mock[AuthConnector]
+    "extract (vat, 99999999) from /vat/99999999" in new SetUp {
+      val verb = HttpVerb("GET")
+      val resource = ResourceToAuthorise(verb, Regime("vat"), AccountId("99999999"))
+      authFilter.extractResource("/vat/99999999", verb, defaultAuthConfig) shouldBe Some(resource)
+    }
 
-  val filter = new AuthorisationFilter {
-    override def authConnector: AuthConnector = authConnectorMock
+    "extract (vat, 99999999) from /vat/99999999/calendar" in new SetUp {
+      val verb = HttpVerb("GET")
+      val resource = ResourceToAuthorise(verb, Regime("vat"), AccountId("99999999"))
+      authFilter.extractResource("/vat/99999999/calendar", verb, defaultAuthConfig) shouldBe Some(resource)
+    }
 
-    override def authConfig(rh: RequestHeader): Option[AuthConfig] = Some(configWithLoa)
+    "extract (epaye, 840%2FMODE26A) from /epaye/840%2FMODE26A" in new SetUp {
+      val verb = HttpVerb("GET")
+      val resource = ResourceToAuthorise(verb, Regime("epaye"), AccountId("840%2FMODE26A"))
+      authFilter.extractResource("/epaye/840%2FMODE26A", verb, defaultAuthConfig) shouldBe Some(resource)
+    }
+
+    "extract (epaye, 840%2FMODE26A) from /epaye/840%2FMODE26A/account-summary" in new SetUp {
+      val verb = HttpVerb("GET")
+      val resource = ResourceToAuthorise(verb, Regime("epaye"), AccountId("840%2FMODE26A"))
+      authFilter.extractResource("/epaye/840%2FMODE26A/account-summary", verb, defaultAuthConfig) shouldBe Some(resource)
+    }
+
+    "extract None from /ping" in new SetUp {
+      authFilter.extractResource("ping", HttpVerb("GET"), defaultAuthConfig) shouldBe None
+    }
   }
 
-  "AuthorisationFilter" should {
-    "add the levelOfAssurance when calling auth" in {
+  "AuthorisationFilter.extractResource with AuthConfig configured for government gateway" should {
 
-      import akka.util.Timeout
-      implicit val timeout = Timeout(3 seconds)
+    "extract (government-gateway-profile/auth/oid, 08732408734) from /profile/auth/oid/08732408734 as special case for government gateway" in new SetUp {
+      val verb = HttpVerb("GET")
+      val ggAuthConfig = AuthConfig(pattern = "/(profile/auth/oid)/([\\w]+)[/]?".r, servicePrefix = "government-gateway-", levelOfAssurance = LevelOfAssurance.LOA_2)
+      val resource = ResourceToAuthorise(verb, Regime("government-gateway-profile/auth/oid"), AccountId("08732408734"))
+      authFilter.extractResource("/profile/auth/oid/08732408734", verb, ggAuthConfig) shouldBe Some(resource)
+    }
+  }
 
-      when(authConnectorMock.authorise(Matchers.any(), Matchers.any())(Matchers.any())).thenReturn(Future.successful(AuthorisationResult(true, false)))
-      val req = FakeRequest("GET", "/myregime/myId", FakeHeaders(), AnyContentAsEmpty, tags = Map(Routes.ROUTE_VERB-> "GET"))
+  "AuthorisationFilter.extractResource with AuthConfig configured for anonymous" should {
 
-      val result = filter((next: RequestHeader) => Future.successful(Ok("All is good")))(req)
-      play.api.test.Helpers.status(result) shouldBe 200
-      play.api.test.Helpers.contentAsString(result) shouldBe "All is good"
+    "extract (charities, None) from /charities/auth as special case for charities" in new SetUp {
+      val verb = HttpVerb("GET")
+      val authConfig = AuthConfig(mode = "passcode", levelOfAssurance = LevelOfAssurance.LOA_2)
+      val resource = ResourceToAuthorise(verb, Regime("charities"))
+      authFilter.extractResource("/charities/blah", verb, authConfig) shouldBe Some(resource)
+    }
+  }
 
-      val captor = ArgumentCaptor.forClass(classOf[AuthRequestParameters])
-      verify(authConnectorMock).authorise(Matchers.any(),captor.capture())(Matchers.any())
-      captor.getValue().levelOfAssurance shouldBe levelOfAssurance.toString
+  "The AuthorisationFilter.apply method when called" should {
+
+    "properly override the account name from controller config and pass the correct account, accountId and delegate authorisation data to the auth connector" in new SetUp {
+
+      val request = FakeRequest("GET", "/anaccount/anid/data", FakeHeaders(), "", tags = Map(ROUTE_VERB -> "GET", ROUTE_CONTROLLER -> "DelegateAuthController"))
+
+      val result = (authFilterWithAccountName.apply((h: RequestHeader) => Future.successful(new Results.Status(200)))(request)).futureValue
+
+      testAuthConnector.capture shouldBe Some(AuthCallCaptured(HttpVerb("GET"), Regime("agent"), Some(AccountId("anid")), AuthRequestParameters(agentRoleRequired = Some("admin"), delegatedAuthRule = Some("lp-paye"), levelOfAssurance = "2")))
+    }
+
+    "not override the account name if not specified in the controller config and pass the account from the url and accountId to the auth connector" in new SetUp {
+
+      val request = FakeRequest("GET", "/anaccount/anid/data", FakeHeaders(), "", tags = Map(ROUTE_VERB -> "GET", ROUTE_CONTROLLER -> "DelegateAuthController"))
+
+      val result = authFilter.apply((h: RequestHeader) => Future.successful(new Results.Status(200)))(request).futureValue
+
+      testAuthConnector.capture shouldBe Some(AuthCallCaptured(HttpVerb("GET"), Regime("anaccount"), Some(AccountId("anid")), AuthRequestParameters(agentRoleRequired = Some("admin"), delegatedAuthRule = Some("lp-paye"), levelOfAssurance = "2")))
+    }
+  }
+
+  class SetUp {
+
+    def buildAuthControllerConfig(includeAccountName: Boolean) = {
+
+      val configMap = Map(
+        "DelegateAuthController.authParams.agentRole" -> "admin",
+        "DelegateAuthController.authParams.delegatedAuthRule" -> "lp-paye")
+
+      val accountProperty = if (includeAccountName) Map("DelegateAuthController.authParams.account" -> "agent") else Map.empty
+
+      val config = ConfigFactory.parseMap(configMap ++ accountProperty)
+      new AuthParamsControllerConfig {
+        override def controllerConfigs: Config = config
+      }
+    }
+
+    case class AuthCallCaptured(method: HttpVerb, account: Regime, accountId: Option[AccountId], authRequestParameters: AuthRequestParameters)
+
+    class TestAuthConnector extends AuthConnector {
+      var capture: Option[AuthCallCaptured] = None
+
+      override def authBaseUrl = "authBaseUrl"
+
+      override protected def callAuth(url: String)(implicit hc: HeaderCarrier): Future[WSResponse] = Future.successful(StubWSResponse(200))
+
+      override def authorise(resource: ResourceToAuthorise, authRequestParameters: AuthRequestParameters)(implicit hc: HeaderCarrier): Future[AuthorisationResult] = {
+        this.capture = Some(AuthCallCaptured(resource.method, resource.regime, resource.accountId, authRequestParameters))
+        Future.successful(AuthorisationResult(true, true))
+      }
+    }
+
+    case class StubWSResponse(statusCode: Int) extends WSResponse {
+      override def allHeaders: Map[String, Seq[String]] = ???
+      override def statusText: String = ???
+      override def underlying[T]: T = ???
+      override def xml: Elem = ???
+      override def body: String = ???
+      override def header(key: String): Option[String] = ???
+      override def cookie(name: String): Option[WSCookie] = ???
+      override def cookies: Seq[WSCookie] = ???
+      override def status: Int = statusCode
+      override def json: JsValue = ???
+    }
+
+    val testAuthConnector = new TestAuthConnector
+
+    val authFilter = new AuthorisationFilter {
+      override def controllerNeedsAuth(controllerName: String) = true
+
+      override val authParamsConfig = buildAuthControllerConfig(includeAccountName = false)
+
+      override lazy val authConnector = testAuthConnector
+    }
+
+    val authFilterWithAccountName = new AuthorisationFilter {
+      override def controllerNeedsAuth(controllerName: String) = true
+
+      override val authParamsConfig = buildAuthControllerConfig(includeAccountName = true)
+
+      override lazy val authConnector = testAuthConnector
     }
   }
 }
