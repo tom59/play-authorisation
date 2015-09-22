@@ -18,7 +18,6 @@ object HmrcBuild extends Build {
     .enablePlugins(SbtAutoBuildPlugin, SbtGitVersioning)
     .settings(
       name := appName,
-      targetJvm := "jvm-1.7",
       scalaVersion := "2.11.7",
       libraryDependencies ++= Seq(
         Compile.playFramework,
@@ -38,7 +37,7 @@ private object BuildDependencies {
   import play.PlayImport._
   import play.core.PlayVersion
 
-  val httpVerbsVersion = "1.10.0"
+  val httpVerbsVersion = "2.0.0"
 
   object Compile {
     val playFramework = "com.typesafe.play" %% "play" % PlayVersion.current % "provided"
