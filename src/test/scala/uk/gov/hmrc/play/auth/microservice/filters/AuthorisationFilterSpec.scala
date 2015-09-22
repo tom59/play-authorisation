@@ -16,97 +16,196 @@
 
 package uk.gov.hmrc.play.auth.microservice.filters
 
-import org.mockito.Mockito.{verify, when}
-import org.mockito.{ArgumentCaptor, Matchers}
+import _root_.play.api.Routes._
+import com.typesafe.config.{Config, ConfigFactory}
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.mock.MockitoSugar
 import org.scalatest.{Matchers => MatchersResults, WordSpecLike}
-import play.api.Routes
-import play.api.mvc.Results._
 import play.api.mvc.{AnyContentAsEmpty, RequestHeader, Result, Results}
 import play.api.test.Helpers._
 import play.api.test.{FakeHeaders, FakeRequest}
-import uk.gov.hmrc.play.auth.controllers.{AuthConfig, LevelOfAssurance}
-import uk.gov.hmrc.play.auth.microservice.connectors.{AuthConnector, AuthRequestParameters}
+import uk.gov.hmrc.play.audit.http.HeaderCarrier
+import uk.gov.hmrc.play.auth.controllers.{AuthConfig, AuthParamsControllerConfig, LevelOfAssurance}
+import uk.gov.hmrc.play.auth.microservice.connectors.{AuthConnector, AuthRequestParameters, _}
 import uk.gov.hmrc.play.http.HeaderNames
 
+import scala.collection.JavaConversions._
 import scala.concurrent.Future
 
-class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with MockitoSugar with ScalaFutures {
+class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with ScalaFutures {
 
+ 
+  "AuthorisationFilter.extractAccountAndAccountId with default AuthConfig" should {
+    val defaultAuthConfig = AuthConfig(levelOfAssurance = LevelOfAssurance.LOA_2)
 
-  private trait Setup {
-
-    val levelOfAssurance = LevelOfAssurance.LOA_1_5
-    val configWithLoa = AuthConfig(levelOfAssurance = levelOfAssurance)
-    val authConnectorMock = mock[AuthConnector]
-  
-    val filter = new AuthorisationFilter {
-      override def authConnector: AuthConnector = authConnectorMock
-  
-      override def authConfig(rh: RequestHeader): Option[AuthConfig] = Some(configWithLoa)
+    "extract (vat, 99999999) from /vat/99999999" in new SetUp {
+      val verb = HttpVerb("GET")
+      val resource = ResourceToAuthorise(verb, Regime("vat"), AccountId("99999999"))
+      authFilter.extractResource("/vat/99999999", verb, defaultAuthConfig) shouldBe Some(resource)
     }
-    
-    def filterRequest(connectorResult: Future[Result], isSurrogate: Boolean= false): Future[Result] = {
-      when(authConnectorMock.authorise(Matchers.any(), Matchers.any())(Matchers.any())).thenReturn(connectorResult)
-      val req = FakeRequest("GET", "/myregime/myId", FakeHeaders(), AnyContentAsEmpty, tags = Map(Routes.ROUTE_VERB-> "GET"))
 
-      filter((next: RequestHeader) => {
-        val isSurrogate = next.headers.get(HeaderNames.surrogate) == Some("true")
-        Future.successful(Ok(if (isSurrogate) "All is surrogate" else "All is good"))
-      })(req)
+    "extract (vat, 99999999) from /vat/99999999/calendar" in new SetUp {
+      val verb = HttpVerb("GET")
+      val resource = ResourceToAuthorise(verb, Regime("vat"), AccountId("99999999"))
+      authFilter.extractResource("/vat/99999999/calendar", verb, defaultAuthConfig) shouldBe Some(resource)
+    }
+
+    "extract (epaye, 840%2FMODE26A) from /epaye/840%2FMODE26A" in new SetUp {
+      val verb = HttpVerb("GET")
+      val resource = ResourceToAuthorise(verb, Regime("epaye"), AccountId("840%2FMODE26A"))
+      authFilter.extractResource("/epaye/840%2FMODE26A", verb, defaultAuthConfig) shouldBe Some(resource)
+    }
+
+    "extract (epaye, 840%2FMODE26A) from /epaye/840%2FMODE26A/account-summary" in new SetUp {
+      val verb = HttpVerb("GET")
+      val resource = ResourceToAuthorise(verb, Regime("epaye"), AccountId("840%2FMODE26A"))
+      authFilter.extractResource("/epaye/840%2FMODE26A/account-summary", verb, defaultAuthConfig) shouldBe Some(resource)
+    }
+
+    "extract None from /ping" in new SetUp {
+      authFilter.extractResource("ping", HttpVerb("GET"), defaultAuthConfig) shouldBe None
+    }
+  }
+
+  "AuthorisationFilter.extractResource with AuthConfig configured for government gateway" should {
+
+    "extract (government-gateway-profile/auth/oid, 08732408734) from /profile/auth/oid/08732408734 as special case for government gateway" in new SetUp {
+      val verb = HttpVerb("GET")
+      val ggAuthConfig = AuthConfig(pattern = "/(profile/auth/oid)/([\\w]+)[/]?".r, servicePrefix = "government-gateway-", levelOfAssurance = LevelOfAssurance.LOA_2)
+      val resource = ResourceToAuthorise(verb, Regime("government-gateway-profile/auth/oid"), AccountId("08732408734"))
+      authFilter.extractResource("/profile/auth/oid/08732408734", verb, ggAuthConfig) shouldBe Some(resource)
+    }
+  }
+
+  "AuthorisationFilter.extractResource with AuthConfig configured for anonymous" should {
+
+    "extract (charities, None) from /charities/auth as special case for charities" in new SetUp {
+      val verb = HttpVerb("GET")
+      val authConfig = AuthConfig(mode = "passcode", levelOfAssurance = LevelOfAssurance.LOA_2)
+      val resource = ResourceToAuthorise(verb, Regime("charities"))
+      authFilter.extractResource("/charities/blah", verb, authConfig) shouldBe Some(resource)
+    }
+  }
+
+  "The AuthorisationFilter.apply method when called" should {
+
+    "properly override the account name from controller config and pass the correct account, accountId and delegate authorisation data to the auth connector" in new SetUp {
+
+      val request = FakeRequest("GET", "/anaccount/anid/data", FakeHeaders(), "", tags = Map(ROUTE_VERB -> "GET", ROUTE_CONTROLLER -> "DelegateAuthController"))
+
+      val result = authFilterWithAccountName.apply((h: RequestHeader) => Future.successful(new Results.Status(200)))(request).futureValue
+
+      testAuthConnector.capture shouldBe Some(AuthCallCaptured(HttpVerb("GET"), Regime("agent"), Some(AccountId("anid")), AuthRequestParameters(agentRoleRequired = Some("admin"), delegatedAuthRule = Some("lp-paye"), levelOfAssurance = levelOfAssurance.toString)))
+    }
+
+    "not override the account name if not specified in the controller config and pass the account from the url and accountId to the auth connector" in new SetUp {
+
+      val request = FakeRequest("GET", "/anaccount/anid/data", FakeHeaders(), "", tags = Map(ROUTE_VERB -> "GET", ROUTE_CONTROLLER -> "DelegateAuthController"))
+
+      val result = authFilter.apply((h: RequestHeader) => Future.successful(new Results.Status(200)))(request).futureValue
+
+      testAuthConnector.capture shouldBe Some(AuthCallCaptured(HttpVerb("GET"), Regime("anaccount"), Some(AccountId("anid")), AuthRequestParameters(agentRoleRequired = Some("admin"), delegatedAuthRule = Some("lp-paye"), levelOfAssurance = levelOfAssurance.toString)))
     }
   }
 
   "AuthorisationFilter" should {
 
-    "add the levelOfAssurance when calling auth" in new Setup {
-      val result = filterRequest(Future.successful(Results.Ok))
+    "add the levelOfAssurance when calling auth" in new SetUp {
+      val result = filterRequest
       status(result) shouldBe 200
       contentAsString(result) shouldBe "All is good"
 
-      val captor = ArgumentCaptor.forClass(classOf[AuthRequestParameters])
-      verify(authConnectorMock).authorise(Matchers.any(),captor.capture())(Matchers.any())
-      captor.getValue().levelOfAssurance shouldBe levelOfAssurance.toString
+      testAuthConnector.capture.map(_.authRequestParameters.levelOfAssurance) shouldBe Some(levelOfAssurance.toString)
     }
 
-    "return 401 if auth returns 401" in new Setup {
-      val result = filterRequest(Future.successful(Results.Unauthorized))
+    "return 401 if auth returns 401" in new SetUp(Results.Unauthorized) {
+      val result = filterRequest
       status(result) shouldBe 401
     }
 
-    "keep all headers if auth returns 401" in new Setup {
-      val result = filterRequest(Future.successful(Results.Unauthorized.withHeaders("WWW-Authenticated" -> "xxx")))
+    "keep all headers if auth returns 401" in new SetUp(Results.Unauthorized.withHeaders("WWW-Authenticated" -> "xxx")) {
+      val result = filterRequest
       status(result) shouldBe 401
       header("WWW-Authenticated", result) shouldBe Some("xxx")
     }
 
-    "return 403 if auth returns 403" in new Setup {
-      val result = filterRequest(Future.successful(Forbidden))
+    "return 403 if auth returns 403" in new SetUp(Results.Forbidden) {
+      val result = filterRequest
       status(result) shouldBe 403
     }
 
-    "return 401 if auth returns any other error" in new Setup {
-      val result = filterRequest(Future.successful(Results.InternalServerError))
+    "return 401 if auth returns any other error" in new SetUp(Results.InternalServerError) {
+      val result = filterRequest
       status(result) shouldBe 401
     }
 
-    "let the request though if auth returns 200" in new Setup {
-      val result = filterRequest(Future.successful(Results.Ok))
+    "let the request though if auth returns 200" in new SetUp {
+      val result = filterRequest
       status(result) shouldBe 200
       contentAsString(result) shouldBe "All is good"
     }
 
-    "add surrogate header to request if auth responds with that header set to true" in new Setup {
-      val result = filterRequest(Future.successful(Results.Ok.withHeaders(HeaderNames.surrogate -> "true")))
+    "add surrogate header to request if auth responds with that header set to true" in new SetUp(Results.Ok.withHeaders(HeaderNames.surrogate -> "true")) {
+      val result = filterRequest
       status(result) shouldBe 200
       contentAsString(result) shouldBe "All is surrogate"
     }
 
-    "not add surrogate header to request if auth responds with that header set to any other value" in new Setup {
-      val result = filterRequest(Future.successful(Results.Ok.withHeaders(HeaderNames.surrogate -> "foo")))
+    "not add surrogate header to request if auth responds with that header set to any other value" in new SetUp(Results.Ok.withHeaders(HeaderNames.surrogate -> "foo")) {
+      val result = filterRequest
       status(result) shouldBe 200
       contentAsString(result) shouldBe "All is good"
     }
+  }
+
+  class SetUp(connectorResult: Result = Results.Ok) {
+
+    val levelOfAssurance = LevelOfAssurance.LOA_1_5
+
+    def filterRequest: Future[Result] = {
+      val req = FakeRequest("GET", "/myregime/myId", FakeHeaders(), AnyContentAsEmpty, tags = Map(ROUTE_VERB -> "GET", ROUTE_CONTROLLER -> "DelegateAuthController"))
+
+      authFilter((next: RequestHeader) => {
+        val isSurrogate = next.headers.get(HeaderNames.surrogate).contains("true")
+        Future.successful(Results.Ok(if (isSurrogate) "All is surrogate" else "All is good"))
+      })(req)
+    }
+
+    case class AuthCallCaptured(method: HttpVerb, account: Regime, accountId: Option[AccountId], authRequestParameters: AuthRequestParameters)
+
+    class TestAuthConnector extends AuthConnector {
+      var capture: Option[AuthCallCaptured] = None
+
+      override def authBaseUrl = "authBaseUrl"
+
+      override def authorise(resource: ResourceToAuthorise, authRequestParameters: AuthRequestParameters)(implicit hc: HeaderCarrier): Future[Result] = {
+        this.capture = Some(AuthCallCaptured(resource.method, resource.regime, resource.accountId, authRequestParameters))
+        Future.successful(connectorResult)
+      }
+    }
+
+    val testAuthConnector = new TestAuthConnector
+
+    class TestAuthorisationFilter(accountProperty: Map[String, String] = Map.empty) extends AuthorisationFilter {
+      override def controllerNeedsAuth(controllerName: String) = true
+
+      private val configMap = Map(
+        "DelegateAuthController.authParams.agentRole" -> "admin",
+        "DelegateAuthController.authParams.delegatedAuthRule" -> "lp-paye",
+        "DelegateAuthController.authParams.levelOfAssurance" -> levelOfAssurance.toString
+      )
+
+      override val authParamsConfig =
+        new AuthParamsControllerConfig {
+          override def controllerConfigs: Config = ConfigFactory.parseMap(configMap ++ accountProperty)
+        }
+
+      override lazy val authConnector = testAuthConnector
+
+
+    }
+
+    val authFilter = new TestAuthorisationFilter
+
+    val authFilterWithAccountName = new TestAuthorisationFilter(Map("DelegateAuthController.authParams.account" -> "agent"))
   }
 }

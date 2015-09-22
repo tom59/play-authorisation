@@ -19,7 +19,7 @@ package uk.gov.hmrc.play.auth.microservice.filters
 import play.api.Routes
 import play.api.mvc._
 import uk.gov.hmrc.play.audit.http.HeaderCarrier
-import uk.gov.hmrc.play.auth.controllers.AuthConfig
+import uk.gov.hmrc.play.auth.controllers.{AuthParamsControllerConfig, AuthConfig}
 import uk.gov.hmrc.play.auth.microservice.connectors._
 import uk.gov.hmrc.play.http.HeaderNames
 import uk.gov.hmrc.play.http.logging.LoggingDetails
@@ -30,11 +30,22 @@ import scala.concurrent.Future
 trait AuthorisationFilter extends Filter {
 
   def authConnector: AuthConnector
+  def controllerNeedsAuth(controllerName: String): Boolean
+  def authParamsConfig: AuthParamsControllerConfig
 
-  def authConfig(rh: RequestHeader): Option[AuthConfig]
+
+  /**
+   * @return None if authorisation is not required OR the RequestHeader does not give enough information for us
+   *         to tell if we need authorisation or not
+   */
+  def authConfig(rh: RequestHeader): Option[AuthConfig] =
+    rh.tags.get(Routes.ROUTE_CONTROLLER).flatMap { name =>
+      if (controllerNeedsAuth(name)) Some(authParamsConfig.authConfig(name))
+      else None
+    }
 
   def apply(next: (RequestHeader) => Future[Result])(rh: RequestHeader): Future[Result] = {
-    implicit val hc = HeaderCarrier.fromHeaders(rh.headers)
+    implicit val hc = HeaderCarrier.fromHeadersAndSession(rh.headers)
 
     authConfig(rh) match {
       case Some(authConfig) => isAuthorised(rh, authConfig).flatMap { result =>
