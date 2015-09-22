@@ -16,59 +16,21 @@
 
 package uk.gov.hmrc.play.auth.microservice.connectors
 
+import org.mockito.Mockito._
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.mock.MockitoSugar
 import org.scalatest.{Matchers, WordSpecLike}
-import play.api.libs.json.JsValue
-import play.api.libs.ws.{WSCookie, WSResponse}
+import play.api.libs.ws.WSResponse
+import play.api.test.Helpers._
 import uk.gov.hmrc.play.audit.http.HeaderCarrier
-import uk.gov.hmrc.play.http.{HeaderNames, HttpResponse}
-import org.mockito.Mockito._
 
 import scala.concurrent.Future
-import scala.xml.Elem
 
 class AuthConnectorSpec extends WordSpecLike with Matchers with MockitoSugar with ScalaFutures {
   val stubAuthConnector = new AuthConnector {
     override def authBaseUrl = ???
 
     override protected def callAuth(url: String)(implicit hc: HeaderCarrier): Future[WSResponse] = ???
-  }
-
-  "AuthConnector.isSurrogate" should {
-
-    case class StubWSResponse(headerValToReturn: Option[String]) extends WSResponse {
-      override def allHeaders: Map[String, Seq[String]] = ???
-      override def statusText: String = ???
-      override def underlying[T]: T = ???
-      override def xml: Elem = ???
-      override def body: String = ???
-      override def header(key: String): Option[String] = headerValToReturn
-      override def cookie(name: String): Option[WSCookie] = ???
-      override def cookies: Seq[WSCookie] = ???
-      override def status: Int = ???
-      override def json: JsValue = ???
-    }
-
-    "return true if the surrogate header contains the string \"true\"" in {
-      stubAuthConnector.isSurrogate(StubWSResponse(Some("true"))) shouldBe true
-    }
-
-    "return false if the surrogate header does not exist" in {
-      stubAuthConnector.isSurrogate(StubWSResponse(None)) shouldBe false
-    }
-
-    "return true if the surrogate header contains the string \"false\"" in {
-      stubAuthConnector.isSurrogate(StubWSResponse(Some("false"))) shouldBe false
-    }
-
-    "return false if the surrogate header is empty" in {
-      stubAuthConnector.isSurrogate(StubWSResponse(Some(""))) shouldBe false
-    }
-
-    "return false if the surrogate header cannot be mapped to a boolean" in {
-      stubAuthConnector.isSurrogate(StubWSResponse(Some("invalid"))) shouldBe false
-    }
   }
 
 
@@ -145,43 +107,12 @@ class AuthConnectorSpec extends WordSpecLike with Matchers with MockitoSugar wit
       authConnector.calledUrl shouldBe Some(s"authBase/authorise/read/foo?levelOfAssurance=$loa")
     }
 
-    "return Authorised(true) when auth response is 200 and request header contains surrogate " in new SetupForAuthorisation {
+    "return auth result with the headers" in new SetupForAuthorisation {
       when(authResponse.status).thenReturn(200)
-      when(authResponse.header(HeaderNames.surrogate)).thenReturn(Some("true"))
-
-      val result = authConnector.authorise(resourceToAuthorise, AuthRequestParameters(loa))(new HeaderCarrier).futureValue
-      result shouldBe Authorised(true)
-    }
-
-    "return Authorised(true) when auth response is 200 and request header does not contain surrogate" in new SetupForAuthorisation {
-      when(authResponse.status).thenReturn(200)
-      when(authResponse.header(HeaderNames.surrogate)).thenReturn(None)
-
-      val result = authConnector.authorise(resourceToAuthorise, AuthRequestParameters(loa))(new HeaderCarrier).futureValue
-      result shouldBe Authorised(false)
-    }
-
-    "return NotAuthenticated when auth response is 401" in new SetupForAuthorisation {
-      when(authResponse.status).thenReturn(401)
-
-      val result = authConnector.authorise(resourceToAuthorise, AuthRequestParameters(loa))(new HeaderCarrier).futureValue
-      result shouldBe NotAuthenticated
-    }
-
-    "return Forbidden when auth response is 403" in new SetupForAuthorisation {
-      when(authResponse.status).thenReturn(403)
-
-      val result = authConnector.authorise(resourceToAuthorise, AuthRequestParameters(loa))(new HeaderCarrier).futureValue
-      result shouldBe Forbidden
-
-    }
-
-    "return NotAuthenticated when auth response is any other status code" in new SetupForAuthorisation {
-      when(authResponse.status).thenReturn(500)
-
-      val result = authConnector.authorise(resourceToAuthorise, AuthRequestParameters(loa))(new HeaderCarrier).futureValue
-      result shouldBe NotAuthenticated
-
+      when(authResponse.allHeaders).thenReturn(Map("a-header" -> Seq("a-value")))
+      val result = authConnector.authorise(resourceToAuthorise, AuthRequestParameters(loa))(new HeaderCarrier)
+      status(result) shouldBe 200
+      result.futureValue.header.headers("a-header") shouldBe "a-value"
     }
   }
 
