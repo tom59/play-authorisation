@@ -17,13 +17,13 @@
 package uk.gov.hmrc.play.auth.microservice.filters
 
 import play.api.Routes
-import play.api.mvc.{Filter, Headers, RequestHeader, Result}
+import play.api.mvc._
 import uk.gov.hmrc.play.audit.http.HeaderCarrier
 import uk.gov.hmrc.play.auth.controllers.{AuthParamsControllerConfig, AuthConfig}
 import uk.gov.hmrc.play.auth.microservice.connectors._
+import uk.gov.hmrc.play.http.HeaderNames
 import uk.gov.hmrc.play.http.logging.LoggingDetails
 import uk.gov.hmrc.play.http.logging.MdcLoggingExecutionContext._
-import uk.gov.hmrc.play.http.{HeaderNames, UnauthorizedException}
 
 import scala.concurrent.Future
 
@@ -48,36 +48,41 @@ trait AuthorisationFilter extends Filter {
     implicit val hc = HeaderCarrier.fromHeadersAndSession(rh.headers)
 
     authConfig(rh) match {
-      case Some(authConfig) => isAuthorised(rh, authConfig).flatMap {
-        case AuthorisationResult(true, true) => next(appendSurrogateHeader(rh))
-        case AuthorisationResult(true, _) => next(rh)
-        case _ => throw new UnauthorizedException(s"Authorisation refused for access to ${rh.method} ${rh.uri}")
+      case Some(authConfig) => isAuthorised(rh, authConfig).flatMap { result =>
+        result.header.status match {
+          case 200 => next(appendSurrogateHeader(rh, result))
+          case 401 | 403 => Future.successful(result)
+          case _ => Future.successful(Results.Unauthorized)
+        }
       }
       case _ => next(rh)
     }
   }
 
-  private def appendSurrogateHeader(rh: RequestHeader): RequestHeader = {
+  private def appendSurrogateHeader(rh: RequestHeader, response : Result ): RequestHeader = {
     val existingHeaders = rh.headers.toMap
     val newHeaders = new Headers {
-      val data: Seq[(String, Seq[String])] = existingHeaders.toSeq ++ Seq(HeaderNames.surrogate -> Seq("true"))
+      val data: Seq[(String, Seq[String])] =
+        response.header.headers.get(HeaderNames.surrogate).fold(existingHeaders.toSeq) {
+          case "true" => existingHeaders.toSeq ++ Seq(HeaderNames.surrogate -> Seq("true"))
+          case _ => existingHeaders.toSeq
+        }
     }
-
     rh.copy(headers = newHeaders)
   }
 
   private implicit def sequence[T](of: Option[Future[T]])(implicit ld: LoggingDetails): Future[Option[T]] =
     of.map(f => f.map(Option(_))).getOrElse(Future.successful(None))
 
-  private def isAuthorised(rh: RequestHeader, authConfig: AuthConfig)(implicit hc: HeaderCarrier): Future[AuthorisationResult] = {
-    val result: Future[Option[AuthorisationResult]] =
+  private def isAuthorised(rh: RequestHeader, authConfig: AuthConfig)(implicit hc: HeaderCarrier): Future[Result] = {
+    val result: Future[Option[Result]] =
       for {
         verb <- rh.tags.get(Routes.ROUTE_VERB).map(HttpVerb)
         resource <- extractResource(rh.path, verb, authConfig)
 
       } yield authConnector.authorise(resource, AuthRequestParameters(authConfig.levelOfAssurance.toString,authConfig.agentRole, authConfig.delegatedAuthRule))
 
-    result.map(_.getOrElse(AuthorisationResult(isAuthorised = false, isSurrogate = false)))
+    result.map(_.getOrElse(Results.Unauthorized))
   }
 
   def extractResource(pathString: String, verb: HttpVerb, authConfig: AuthConfig): Option[ResourceToAuthorise] =

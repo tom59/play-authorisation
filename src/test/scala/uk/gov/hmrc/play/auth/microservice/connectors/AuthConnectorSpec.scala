@@ -16,55 +16,21 @@
 
 package uk.gov.hmrc.play.auth.microservice.connectors
 
+import org.mockito.Mockito._
+import org.scalatest.concurrent.ScalaFutures
+import org.scalatest.mock.MockitoSugar
 import org.scalatest.{Matchers, WordSpecLike}
-import play.api.libs.json.JsValue
-import play.api.libs.ws.{WSCookie, WSResponse}
+import play.api.libs.ws.WSResponse
+import play.api.test.Helpers._
 import uk.gov.hmrc.play.audit.http.HeaderCarrier
 
 import scala.concurrent.Future
-import scala.xml.Elem
 
-class AuthConnectorSpec extends WordSpecLike with Matchers {
+class AuthConnectorSpec extends WordSpecLike with Matchers with MockitoSugar with ScalaFutures {
   val stubAuthConnector = new AuthConnector {
     override def authBaseUrl = ???
 
     override protected def callAuth(url: String)(implicit hc: HeaderCarrier): Future[WSResponse] = ???
-  }
-
-  "AuthConnector.isSurrogate" should {
-
-    case class StubWSResponse(headerValToReturn: Option[String]) extends WSResponse {
-      override def allHeaders: Map[String, Seq[String]] = ???
-      override def statusText: String = ???
-      override def underlying[T]: T = ???
-      override def xml: Elem = ???
-      override def body: String = ???
-      override def header(key: String): Option[String] = headerValToReturn
-      override def cookie(name: String): Option[WSCookie] = ???
-      override def cookies: Seq[WSCookie] = ???
-      override def status: Int = ???
-      override def json: JsValue = ???
-    }
-
-    "return true if the surrogate header contains the string \"true\"" in {
-      stubAuthConnector.isSurrogate(StubWSResponse(Some("true"))) shouldBe true
-    }
-
-    "return false if the surrogate header does not exist" in {
-      stubAuthConnector.isSurrogate(StubWSResponse(None)) shouldBe false
-    }
-
-    "return true if the surrogate header contains the string \"false\"" in {
-      stubAuthConnector.isSurrogate(StubWSResponse(Some("false"))) shouldBe false
-    }
-
-    "return false if the surrogate header is empty" in {
-      stubAuthConnector.isSurrogate(StubWSResponse(Some(""))) shouldBe false
-    }
-
-    "return false if the surrogate header cannot be mapped to a boolean" in {
-      stubAuthConnector.isSurrogate(StubWSResponse(Some("invalid"))) shouldBe false
-    }
   }
 
 
@@ -102,6 +68,20 @@ class AuthConnectorSpec extends WordSpecLike with Matchers {
   }
 
 
+  private trait SetupForAuthorisation {
+    val resourceToAuthorise = ResourceToAuthorise(HttpVerb("GET"), Regime("foo"), AccountId("testid"))
+
+    val authResponse : WSResponse = mock[WSResponse]
+    val authConnector = new AuthConnector {
+
+      override def authBaseUrl = "authBase"
+
+      override protected def callAuth(url: String)(implicit hc: HeaderCarrier): Future[WSResponse] = {
+        Future.successful(authResponse)
+      }
+    }
+
+  }
 
   "AuthConnector.authorise" should {
     val authConnector = new AuthConnector {
@@ -125,6 +105,14 @@ class AuthConnectorSpec extends WordSpecLike with Matchers {
       val resourceToAuthorise = ResourceToAuthorise(HttpVerb("GET"), Regime("foo"))
       authConnector.authorise(resourceToAuthorise, AuthRequestParameters(loa))(new HeaderCarrier)
       authConnector.calledUrl shouldBe Some(s"authBase/authorise/read/foo?levelOfAssurance=$loa")
+    }
+
+    "return auth result with the headers" in new SetupForAuthorisation {
+      when(authResponse.status).thenReturn(200)
+      when(authResponse.allHeaders).thenReturn(Map("a-header" -> Seq("a-value")))
+      val result = authConnector.authorise(resourceToAuthorise, AuthRequestParameters(loa))(new HeaderCarrier)
+      status(result) shouldBe 200
+      result.futureValue.header.headers("a-header") shouldBe "a-value"
     }
   }
 

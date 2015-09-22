@@ -19,22 +19,21 @@ package uk.gov.hmrc.play.auth.microservice.filters
 import _root_.play.api.Routes._
 import com.typesafe.config.{Config, ConfigFactory}
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.mock.MockitoSugar
-import org.scalatest.{WordSpecLike, Matchers => MatchersResults}
-import play.api.libs.json.JsValue
-import play.api.libs.ws.{WSCookie, WSResponse}
-import play.api.mvc.{RequestHeader, Results}
+import org.scalatest.{Matchers => MatchersResults, WordSpecLike}
+import play.api.mvc.{AnyContentAsEmpty, RequestHeader, Result, Results}
+import play.api.test.Helpers._
 import play.api.test.{FakeHeaders, FakeRequest}
 import uk.gov.hmrc.play.audit.http.HeaderCarrier
 import uk.gov.hmrc.play.auth.controllers.{AuthConfig, AuthParamsControllerConfig, LevelOfAssurance}
-import uk.gov.hmrc.play.auth.microservice.connectors._
+import uk.gov.hmrc.play.auth.microservice.connectors.{AuthConnector, AuthRequestParameters, _}
+import uk.gov.hmrc.play.http.HeaderNames
 
 import scala.collection.JavaConversions._
 import scala.concurrent.Future
-import scala.xml.Elem
 
-class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with MockitoSugar with ScalaFutures {
+class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with ScalaFutures {
 
+ 
   "AuthorisationFilter.extractAccountAndAccountId with default AuthConfig" should {
     val defaultAuthConfig = AuthConfig(levelOfAssurance = LevelOfAssurance.LOA_2)
 
@@ -93,9 +92,9 @@ class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with Moc
 
       val request = FakeRequest("GET", "/anaccount/anid/data", FakeHeaders(), "", tags = Map(ROUTE_VERB -> "GET", ROUTE_CONTROLLER -> "DelegateAuthController"))
 
-      val result = (authFilterWithAccountName.apply((h: RequestHeader) => Future.successful(new Results.Status(200)))(request)).futureValue
+      val result = authFilterWithAccountName.apply((h: RequestHeader) => Future.successful(new Results.Status(200)))(request).futureValue
 
-      testAuthConnector.capture shouldBe Some(AuthCallCaptured(HttpVerb("GET"), Regime("agent"), Some(AccountId("anid")), AuthRequestParameters(agentRoleRequired = Some("admin"), delegatedAuthRule = Some("lp-paye"), levelOfAssurance = "2")))
+      testAuthConnector.capture shouldBe Some(AuthCallCaptured(HttpVerb("GET"), Regime("agent"), Some(AccountId("anid")), AuthRequestParameters(agentRoleRequired = Some("admin"), delegatedAuthRule = Some("lp-paye"), levelOfAssurance = levelOfAssurance.toString)))
     }
 
     "not override the account name if not specified in the controller config and pass the account from the url and accountId to the auth connector" in new SetUp {
@@ -104,24 +103,71 @@ class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with Moc
 
       val result = authFilter.apply((h: RequestHeader) => Future.successful(new Results.Status(200)))(request).futureValue
 
-      testAuthConnector.capture shouldBe Some(AuthCallCaptured(HttpVerb("GET"), Regime("anaccount"), Some(AccountId("anid")), AuthRequestParameters(agentRoleRequired = Some("admin"), delegatedAuthRule = Some("lp-paye"), levelOfAssurance = "2")))
+      testAuthConnector.capture shouldBe Some(AuthCallCaptured(HttpVerb("GET"), Regime("anaccount"), Some(AccountId("anid")), AuthRequestParameters(agentRoleRequired = Some("admin"), delegatedAuthRule = Some("lp-paye"), levelOfAssurance = levelOfAssurance.toString)))
     }
   }
 
-  class SetUp {
+  "AuthorisationFilter" should {
 
-    def buildAuthControllerConfig(includeAccountName: Boolean) = {
+    "add the levelOfAssurance when calling auth" in new SetUp {
+      val result = filterRequest
+      status(result) shouldBe 200
+      contentAsString(result) shouldBe "All is good"
 
-      val configMap = Map(
-        "DelegateAuthController.authParams.agentRole" -> "admin",
-        "DelegateAuthController.authParams.delegatedAuthRule" -> "lp-paye")
+      testAuthConnector.capture.map(_.authRequestParameters.levelOfAssurance) shouldBe Some(levelOfAssurance.toString)
+    }
 
-      val accountProperty = if (includeAccountName) Map("DelegateAuthController.authParams.account" -> "agent") else Map.empty
+    "return 401 if auth returns 401" in new SetUp(Results.Unauthorized) {
+      val result = filterRequest
+      status(result) shouldBe 401
+    }
 
-      val config = ConfigFactory.parseMap(configMap ++ accountProperty)
-      new AuthParamsControllerConfig {
-        override def controllerConfigs: Config = config
-      }
+    "keep all headers if auth returns 401" in new SetUp(Results.Unauthorized.withHeaders("WWW-Authenticated" -> "xxx")) {
+      val result = filterRequest
+      status(result) shouldBe 401
+      header("WWW-Authenticated", result) shouldBe Some("xxx")
+    }
+
+    "return 403 if auth returns 403" in new SetUp(Results.Forbidden) {
+      val result = filterRequest
+      status(result) shouldBe 403
+    }
+
+    "return 401 if auth returns any other error" in new SetUp(Results.InternalServerError) {
+      val result = filterRequest
+      status(result) shouldBe 401
+    }
+
+    "let the request though if auth returns 200" in new SetUp {
+      val result = filterRequest
+      status(result) shouldBe 200
+      contentAsString(result) shouldBe "All is good"
+    }
+
+    "add surrogate header to request if auth responds with that header set to true" in new SetUp(Results.Ok.withHeaders(HeaderNames.surrogate -> "true")) {
+      val result = filterRequest
+      status(result) shouldBe 200
+      contentAsString(result) shouldBe "All is surrogate"
+    }
+
+    "not add surrogate header to request if auth responds with that header set to any other value" in new SetUp(Results.Ok.withHeaders(HeaderNames.surrogate -> "foo")) {
+      val result = filterRequest
+      status(result) shouldBe 200
+      contentAsString(result) shouldBe "All is good"
+    }
+  }
+
+  class SetUp(connectorResult: Result = Results.Ok) {
+
+    val levelOfAssurance = LevelOfAssurance.LOA_1_5
+
+    def filterRequest: Future[Result] = {
+      val req = FakeRequest("GET", "/myregime/myId", FakeHeaders(), AnyContentAsEmpty, tags = Map(ROUTE_VERB -> "GET", ROUTE_CONTROLLER -> "DelegateAuthController"))
+
+      authFilter((next: RequestHeader) => {
+        val isSurrogate = next.headers.get(HeaderNames.surrogate).contains("true")
+        Future.successful(Results.Ok(if (isSurrogate) "All is surrogate" else "All is good"))
+      })(req)
     }
 
     case class AuthCallCaptured(method: HttpVerb, account: Regime, accountId: Option[AccountId], authRequestParameters: AuthRequestParameters)
@@ -131,43 +177,35 @@ class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with Moc
 
       override def authBaseUrl = "authBaseUrl"
 
-      override protected def callAuth(url: String)(implicit hc: HeaderCarrier): Future[WSResponse] = Future.successful(StubWSResponse(200))
-
-      override def authorise(resource: ResourceToAuthorise, authRequestParameters: AuthRequestParameters)(implicit hc: HeaderCarrier): Future[AuthorisationResult] = {
+      override def authorise(resource: ResourceToAuthorise, authRequestParameters: AuthRequestParameters)(implicit hc: HeaderCarrier): Future[Result] = {
         this.capture = Some(AuthCallCaptured(resource.method, resource.regime, resource.accountId, authRequestParameters))
-        Future.successful(AuthorisationResult(true, true))
+        Future.successful(connectorResult)
       }
-    }
-
-    case class StubWSResponse(statusCode: Int) extends WSResponse {
-      override def allHeaders: Map[String, Seq[String]] = ???
-      override def statusText: String = ???
-      override def underlying[T]: T = ???
-      override def xml: Elem = ???
-      override def body: String = ???
-      override def header(key: String): Option[String] = ???
-      override def cookie(name: String): Option[WSCookie] = ???
-      override def cookies: Seq[WSCookie] = ???
-      override def status: Int = statusCode
-      override def json: JsValue = ???
     }
 
     val testAuthConnector = new TestAuthConnector
 
-    val authFilter = new AuthorisationFilter {
+    class TestAuthorisationFilter(accountProperty: Map[String, String] = Map.empty) extends AuthorisationFilter {
       override def controllerNeedsAuth(controllerName: String) = true
 
-      override val authParamsConfig = buildAuthControllerConfig(includeAccountName = false)
+      private val configMap = Map(
+        "DelegateAuthController.authParams.agentRole" -> "admin",
+        "DelegateAuthController.authParams.delegatedAuthRule" -> "lp-paye",
+        "DelegateAuthController.authParams.levelOfAssurance" -> levelOfAssurance.toString
+      )
+
+      override val authParamsConfig =
+        new AuthParamsControllerConfig {
+          override def controllerConfigs: Config = ConfigFactory.parseMap(configMap ++ accountProperty)
+        }
 
       override lazy val authConnector = testAuthConnector
+
+
     }
 
-    val authFilterWithAccountName = new AuthorisationFilter {
-      override def controllerNeedsAuth(controllerName: String) = true
+    val authFilter = new TestAuthorisationFilter
 
-      override val authParamsConfig = buildAuthControllerConfig(includeAccountName = true)
-
-      override lazy val authConnector = testAuthConnector
-    }
+    val authFilterWithAccountName = new TestAuthorisationFilter(Map("DelegateAuthController.authParams.account" -> "agent"))
   }
 }

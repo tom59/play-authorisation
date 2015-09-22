@@ -16,11 +16,11 @@
 
 package uk.gov.hmrc.play.auth.microservice.connectors
 
-import play.api.Logger
+import play.api.libs.iteratee.Enumerator
 import play.api.libs.ws.WSResponse
+import play.api.mvc.{ResponseHeader, Result}
 import uk.gov.hmrc.play.audit.http.HeaderCarrier
 import uk.gov.hmrc.play.connectors.Connector
-import uk.gov.hmrc.play.http.HeaderNames
 import uk.gov.hmrc.play.http.logging.ConnectionTracing
 
 import scala.concurrent.Future
@@ -80,27 +80,20 @@ case class AuthRequestParameters(levelOfAssurance: String,
   }
 }
 
-case class AuthorisationResult(isAuthorised: Boolean, isSurrogate: Boolean)
-
-
 trait AuthConnector extends Connector with ConnectionTracing {
   import uk.gov.hmrc.play.http.logging.MdcLoggingExecutionContext._
 
   def authBaseUrl: String
 
-  def authorise(resource: ResourceToAuthorise, authRequestParameters: AuthRequestParameters)(implicit hc: HeaderCarrier): Future[AuthorisationResult] = {
+  def authorise(resource: ResourceToAuthorise, authRequestParameters: AuthRequestParameters)(implicit hc: HeaderCarrier): Future[Result] = {
     val url = resource.buildUrl(authBaseUrl, authRequestParameters)
-    callAuth(url).map {
-      response =>
-        response.status match {
-          case 200 => AuthorisationResult(isAuthorised = true, isSurrogate = isSurrogate(response))
-          case 401 => AuthorisationResult(isAuthorised = false, isSurrogate = false)
-          case status => Logger.error(s"Unexpected status $status returned from auth call to $url"); AuthorisationResult(isAuthorised = false, isSurrogate = false)
-        }
+    callAuth(url) map { response =>
+      val headers = response.allHeaders map {
+        h => (h._1, h._2.head)
+      }
+      Result(ResponseHeader(response.status, headers), Enumerator(Array()))
     }
   }
-
-  private[connectors] def isSurrogate(response: WSResponse) = response.header(HeaderNames.surrogate).contains("true")
 
   protected def callAuth(url: String)(implicit hc: HeaderCarrier): Future[WSResponse] = withTracing("GET", url) {
     buildRequest(url).get()
