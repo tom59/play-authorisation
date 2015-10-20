@@ -53,7 +53,7 @@ class AuthConfigSpec extends WordSpecLike with Matchers {
       |    needsAuth = true
       |    authParams = {
       |      pattern = "/(\\w*)/(\\d)/.*"
-      |      levelOfAssurance = "1.5"
+      |      confidenceLevel = 200
       |    }
       |  }
       |}
@@ -62,7 +62,7 @@ class AuthConfigSpec extends WordSpecLike with Matchers {
   val configForDefaulLOA = ConfigFactory.parseString(
     """
       |controllers {
-      |  defaultLevelOfAssurance = "1"
+      |  confidenceLevel = 100
       |}
     """.stripMargin)
 
@@ -70,7 +70,7 @@ class AuthConfigSpec extends WordSpecLike with Matchers {
     lazy val controllerConfigs = config.as[Config]("controllers")
   }
 
-  val ccForDefaultLOA = new AuthParamsControllerConfig {
+  val ccForDefaultConfidenceLevel = new AuthParamsControllerConfig {
     lazy val controllerConfigs = configForDefaulLOA.as[Config]("controllers")
   }
 
@@ -108,19 +108,19 @@ class AuthConfigSpec extends WordSpecLike with Matchers {
       config.delegatedAuthRule shouldBe None
     }
 
-    "set defaultLevelOfAssurance to '2' when global defaultLevelOfAssurance is missing" in {
+    "set confidenceLevel to 500  when global global confidenceLevel is not set" in {
       val config = cc.authConfig("uk.gov.hmrc.play.controllers.DelegateAuthController")
-      config.levelOfAssurance shouldBe LevelOfAssurance.LOA_2
+      config.confidenceLevel shouldBe 500
     }
 
-    "set defaultLevelOfAssurance to '1' at global level" in {
-      val config = ccForDefaultLOA.authConfig("uk.gov.hmrc.play.controllers.DelegateAuthController")
-      config.levelOfAssurance shouldBe LevelOfAssurance.LOA_1
+    "set confidenceLevel to 100  at global level" in {
+      val config = ccForDefaultConfidenceLevel.authConfig("uk.gov.hmrc.play.controllers.DelegateAuthController")
+      config.confidenceLevel shouldBe 100
     }
 
-    "set levelOfAssurance to '1.5' for the specific controller" in {
+    "set confidenceLevel to 200  for the specific controller" in {
       val config = cc.authConfig("uk.gov.hmrc.play.controllers.AbsentDelegateAuthController")
-      config.levelOfAssurance shouldBe LevelOfAssurance.LOA_1_5
+      config.confidenceLevel shouldBe 200
     }
 
 

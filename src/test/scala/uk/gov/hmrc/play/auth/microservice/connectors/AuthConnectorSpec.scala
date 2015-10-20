@@ -34,36 +34,36 @@ class AuthConnectorSpec extends WordSpecLike with Matchers with MockitoSugar wit
   }
 
 
-  val loa: String = "1.5"
+  val ConfidenceLevel = 100
   "ResourceToAuthorise.buildUrl" should {
 
     val authBaseUrl = "authBase"
     "generate a url for get authorisation" in {
-      ResourceToAuthorise(HttpVerb("GET"), Regime("foo"), AccountId("testid")).buildUrl(authBaseUrl, AuthRequestParameters(loa)) shouldBe s"authBase/authorise/read/foo/testid?levelOfAssurance=$loa"
+      ResourceToAuthorise(HttpVerb("GET"), Regime("foo"), AccountId("testid")).buildUrl(authBaseUrl, AuthRequestParameters(ConfidenceLevel)) shouldBe s"authBase/authorise/read/foo/testid?confidenceLevel=$ConfidenceLevel"
     }
     "generate a url for head authorisation" in {
-      ResourceToAuthorise(HttpVerb("HEAD"), Regime("foo"), AccountId("testid")).buildUrl(authBaseUrl, AuthRequestParameters(loa)) shouldBe s"authBase/authorise/read/foo/testid?levelOfAssurance=$loa"
+      ResourceToAuthorise(HttpVerb("HEAD"), Regime("foo"), AccountId("testid")).buildUrl(authBaseUrl, AuthRequestParameters(ConfidenceLevel)) shouldBe s"authBase/authorise/read/foo/testid?confidenceLevel=$ConfidenceLevel"
     }
     "generate a url for post authorisation" in {
-      ResourceToAuthorise(HttpVerb("POST"), Regime("foo"), AccountId("testid")).buildUrl(authBaseUrl, AuthRequestParameters(loa)) shouldBe s"authBase/authorise/write/foo/testid?levelOfAssurance=$loa"
+      ResourceToAuthorise(HttpVerb("POST"), Regime("foo"), AccountId("testid")).buildUrl(authBaseUrl, AuthRequestParameters(ConfidenceLevel)) shouldBe s"authBase/authorise/write/foo/testid?confidenceLevel=$ConfidenceLevel"
     }
     "generate a url for put authorisation" in {
-      ResourceToAuthorise(HttpVerb("PUT"), Regime("foo"), AccountId("testid")).buildUrl(authBaseUrl, AuthRequestParameters(loa)) shouldBe s"authBase/authorise/write/foo/testid?levelOfAssurance=$loa"
+      ResourceToAuthorise(HttpVerb("PUT"), Regime("foo"), AccountId("testid")).buildUrl(authBaseUrl, AuthRequestParameters(ConfidenceLevel)) shouldBe s"authBase/authorise/write/foo/testid?confidenceLevel=$ConfidenceLevel"
     }
     "generate a url for delete authorisation" in {
-      ResourceToAuthorise(HttpVerb("DELETE"), Regime("foo"), AccountId("testid")).buildUrl(authBaseUrl, AuthRequestParameters(loa)) shouldBe s"authBase/authorise/write/foo/testid?levelOfAssurance=$loa"
+      ResourceToAuthorise(HttpVerb("DELETE"), Regime("foo"), AccountId("testid")).buildUrl(authBaseUrl, AuthRequestParameters(ConfidenceLevel)) shouldBe s"authBase/authorise/write/foo/testid?confidenceLevel=$ConfidenceLevel"
     }
 
     "generate a url for role based agent authorisation" in {
-      ResourceToAuthorise(HttpVerb("GET"), Regime("agent"), AccountId("testid")).buildUrl(authBaseUrl, AuthRequestParameters(loa, agentRoleRequired = Some("admin"))) shouldBe s"authBase/authorise/read/agent/testid?levelOfAssurance=$loa&agentRoleRequired=admin"
+      ResourceToAuthorise(HttpVerb("GET"), Regime("agent"), AccountId("testid")).buildUrl(authBaseUrl, AuthRequestParameters(ConfidenceLevel, agentRoleRequired = Some("admin"))) shouldBe s"authBase/authorise/read/agent/testid?confidenceLevel=$ConfidenceLevel&agentRoleRequired=admin"
     }
 
     "generate a url for rule based agent authorisation" in {
-      ResourceToAuthorise(HttpVerb("GET"), Regime("agent"), AccountId("testid")).buildUrl(authBaseUrl, AuthRequestParameters(loa, delegatedAuthRule = Some("lp-paye"))) shouldBe s"authBase/authorise/read/agent/testid?levelOfAssurance=$loa&delegatedAuthRule=lp-paye"
+      ResourceToAuthorise(HttpVerb("GET"), Regime("agent"), AccountId("testid")).buildUrl(authBaseUrl, AuthRequestParameters(ConfidenceLevel, delegatedAuthRule = Some("lp-paye"))) shouldBe s"authBase/authorise/read/agent/testid?confidenceLevel=$ConfidenceLevel&delegatedAuthRule=lp-paye"
     }
 
     "generate a url for role and rule based agent authorisation" in {
-      ResourceToAuthorise(HttpVerb("GET"), Regime("agent"), AccountId("testid")).buildUrl(authBaseUrl, AuthRequestParameters(loa, agentRoleRequired = Some("admin"), delegatedAuthRule = Some("lp-paye"))) shouldBe s"authBase/authorise/read/agent/testid?levelOfAssurance=$loa&agentRoleRequired=admin&delegatedAuthRule=lp-paye"
+      ResourceToAuthorise(HttpVerb("GET"), Regime("agent"), AccountId("testid")).buildUrl(authBaseUrl, AuthRequestParameters(ConfidenceLevel, agentRoleRequired = Some("admin"), delegatedAuthRule = Some("lp-paye"))) shouldBe s"authBase/authorise/read/agent/testid?confidenceLevel=$ConfidenceLevel&agentRoleRequired=admin&delegatedAuthRule=lp-paye"
     }
   }
 
@@ -97,20 +97,20 @@ class AuthConnectorSpec extends WordSpecLike with Matchers with MockitoSugar wit
 
     "invoke callAuth with accountId" in {
       val resourceToAuthorise = ResourceToAuthorise(HttpVerb("GET"), Regime("foo"), AccountId("testid"))
-      authConnector.authorise(resourceToAuthorise, AuthRequestParameters(loa))(new HeaderCarrier)
-      authConnector.calledUrl shouldBe Some(s"authBase/authorise/read/foo/testid?levelOfAssurance=$loa")
+      authConnector.authorise(resourceToAuthorise, AuthRequestParameters(ConfidenceLevel))(new HeaderCarrier)
+      authConnector.calledUrl shouldBe Some(s"authBase/authorise/read/foo/testid?confidenceLevel=$ConfidenceLevel")
     }
 
     "invoke callAuth without accountId" in {
       val resourceToAuthorise = ResourceToAuthorise(HttpVerb("GET"), Regime("foo"))
-      authConnector.authorise(resourceToAuthorise, AuthRequestParameters(loa))(new HeaderCarrier)
-      authConnector.calledUrl shouldBe Some(s"authBase/authorise/read/foo?levelOfAssurance=$loa")
+      authConnector.authorise(resourceToAuthorise, AuthRequestParameters(ConfidenceLevel))(new HeaderCarrier)
+      authConnector.calledUrl shouldBe Some(s"authBase/authorise/read/foo?confidenceLevel=$ConfidenceLevel")
     }
 
     "return auth result with the headers" in new SetupForAuthorisation {
       when(authResponse.status).thenReturn(200)
       when(authResponse.allHeaders).thenReturn(Map("a-header" -> Seq("a-value")))
-      val result = authConnector.authorise(resourceToAuthorise, AuthRequestParameters(loa))(new HeaderCarrier)
+      val result = authConnector.authorise(resourceToAuthorise, AuthRequestParameters(ConfidenceLevel))(new HeaderCarrier)
       status(result) shouldBe 200
       result.futureValue.header.headers("a-header") shouldBe "a-value"
     }

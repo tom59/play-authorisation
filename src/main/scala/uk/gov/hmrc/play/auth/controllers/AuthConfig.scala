@@ -16,32 +16,8 @@
 
 package uk.gov.hmrc.play.auth.controllers
 
-import play.api.libs.json._
-import uk.gov.hmrc.play.auth.controllers.LevelOfAssurance.LevelOfAssurance
-
 import scala.util.matching.Regex
 
-
-object LevelOfAssurance extends Enumeration {
-  type LevelOfAssurance = Value
-  val LOA_1 = Value("1")
-  val LOA_1_5 = Value("1.5")
-  val LOA_2 = Value("2")
-
-  implicit val format = new Format[LevelOfAssurance] {
-
-    override def reads(json: JsValue): JsResult[LevelOfAssurance] = json match {
-      case JsString(v) => try {
-        JsSuccess(LevelOfAssurance.withName(v))
-      } catch {
-        case e: NoSuchElementException => JsError(s"Invalid value for LevelOfAssurance: '$v'")
-      }
-      case _ => JsError("String value expected")
-    }
-
-    override def writes(v: LevelOfAssurance): JsValue = JsString(v.toString)
-  }
-}
 case class AuthConfig(mode: String = "identity",
                       pattern: Regex = AuthConfig.defaultPatternRegex,
                       anonymousLoginPattern: Regex = AuthConfig.defaultAnonymousPatternRegex,
@@ -49,7 +25,7 @@ case class AuthConfig(mode: String = "identity",
                       account: Option[String] = None,
                       agentRole: Option[String] = None,
                       delegatedAuthRule: Option[String] = None,
-                      levelOfAssurance: LevelOfAssurance)
+                      confidenceLevel: Int)
 
 object AuthConfig {
   val defaultPatternRegex = "/([\\w]+)/([^/]+)/?.*".r
@@ -58,19 +34,15 @@ object AuthConfig {
 
 trait AuthParamsControllerConfig {
 
-  import uk.gov.hmrc.play.auth.controllers.LevelOfAssurance._
   import com.typesafe.config.Config
   import net.ceedubs.ficus.Ficus._
   import net.ceedubs.ficus.readers.{StringReader, ValueReader}
 
   def controllerConfigs: Config
 
-  private lazy val assignedDefaultLOA: Option[LevelOfAssurance] = controllerConfigs.getAs[LevelOfAssurance]("defaultLevelOfAssurance")
-  private lazy val globalLOA = assignedDefaultLOA.getOrElse(LevelOfAssurance.LOA_2)
+  private lazy val GlobalConfidenceLevel: Int = controllerConfigs.getAs[Int]("confidenceLevel").getOrElse(500)
 
-  private implicit val regexValueReader: ValueReader[Regex] = StringReader.stringValueReader.map(_.r)
-  private implicit val loaValueReader: ValueReader[LevelOfAssurance] = StringReader.stringValueReader map LevelOfAssurance.withName
-
+  private implicit val RegexValueReader: ValueReader[Regex] = StringReader.stringValueReader.map(_.r)
 
   private implicit val authConfigReader = ValueReader.relative[AuthConfig] { config: Config =>
     AuthConfig(
@@ -81,11 +53,11 @@ trait AuthParamsControllerConfig {
       account = config.getAs[String]("account"),
       agentRole = config.getAs[String]("agentRole"),
       delegatedAuthRule = config.getAs[String]("delegatedAuthRule"),
-      levelOfAssurance = config.getAs[LevelOfAssurance]("levelOfAssurance").getOrElse(globalLOA)
+      confidenceLevel = config.getAs[Int]("confidenceLevel").getOrElse(GlobalConfidenceLevel)
     )
   }
 
   def authConfig(controllerName: String): AuthConfig = {
-    controllerConfigs.as[Option[AuthConfig]](s"$controllerName.authParams").getOrElse(AuthConfig(levelOfAssurance = globalLOA))
+    controllerConfigs.as[Option[AuthConfig]](s"$controllerName.authParams").getOrElse(AuthConfig(confidenceLevel = GlobalConfidenceLevel))
   }
 }
