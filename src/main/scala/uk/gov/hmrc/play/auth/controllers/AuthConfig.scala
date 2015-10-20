@@ -25,7 +25,10 @@ case class AuthConfig(mode: String = "identity",
                       account: Option[String] = None,
                       agentRole: Option[String] = None,
                       delegatedAuthRule: Option[String] = None,
-                      confidenceLevel: Int)
+                      confidenceLevel: Int) {
+  val clValues = Seq(0, 100, 200, 300, 500)
+  require(clValues.contains(confidenceLevel), s"Invalid confidence level $confidenceLevel expected one of ${clValues.mkString(",")}")
+}
 
 object AuthConfig {
   val defaultPatternRegex = "/([\\w]+)/([^/]+)/?.*".r
