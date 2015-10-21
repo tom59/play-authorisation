@@ -26,6 +26,7 @@ class AuthConfigSpec extends WordSpecLike with Matchers {
   val config = ConfigFactory.parseString(
     """
       |controllers {
+      |confidenceLevel = 0
       |  com.kenshoo.play.metrics.MetricsController {
       |    needsAuditing = false
       |  }
@@ -60,7 +61,7 @@ class AuthConfigSpec extends WordSpecLike with Matchers {
     """.stripMargin)
 
 
-val InvalidConfig = ConfigFactory.parseString(
+  val InvalidConfig = ConfigFactory.parseString(
     """
       |controllers {
       |  uk.gov.hmrc.play.controllers.AbsentDelegateAuthController {
@@ -85,6 +86,19 @@ val InvalidConfig = ConfigFactory.parseString(
     """
       |controllers {
       |  confidenceLevel = 56
+      |}
+    """.stripMargin)
+
+
+  val NoCL = ConfigFactory.parseString(
+    """
+      |controllers {
+      |  com.kenshoo.play.metrics.MetricsController {
+      |    needsAuditing = false
+      |    authParams = {
+      |      pattern = "/(\\w*)/(\\d)/.*"
+      |    }
+      |  }
       |}
     """.stripMargin)
 
@@ -131,9 +145,13 @@ val InvalidConfig = ConfigFactory.parseString(
       config.delegatedAuthRule shouldBe None
     }
 
-    "set confidenceLevel to 500  when global global confidenceLevel is not set" in {
-      val config = cc.authConfig("uk.gov.hmrc.play.controllers.DelegateAuthController")
-      config.confidenceLevel shouldBe 500
+    "throw error when confidenceLevel is not set either at global  or controller level " in {
+      val cc = new AuthParamsControllerConfig {
+        lazy val controllerConfigs = NoCL.as[Config]("controllers")
+      }
+      an[Exception] shouldBe thrownBy {
+        cc.authConfig("com.kenshoo.play.metrics.MetricsController")
+      }
     }
 
     "set confidenceLevel to 100  at global level" in {

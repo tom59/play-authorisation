@@ -43,9 +43,11 @@ trait AuthParamsControllerConfig {
 
   def controllerConfigs: Config
 
-  private lazy val GlobalConfidenceLevel: Int = controllerConfigs.getAs[Int]("confidenceLevel").getOrElse(500)
+  private lazy val GlobalConfidenceLevel: Option[Int] = controllerConfigs.getAs[Int]("confidenceLevel")
 
   private implicit val RegexValueReader: ValueReader[Regex] = StringReader.stringValueReader.map(_.r)
+
+  private lazy val NoConfidenceLevelError =  new InvalidConfigurationException("confidenceLevel must be set at either global controllers or individual controller level")
 
   private implicit val authConfigReader = ValueReader.relative[AuthConfig] { config: Config =>
     AuthConfig(
@@ -56,11 +58,14 @@ trait AuthParamsControllerConfig {
       account = config.getAs[String]("account"),
       agentRole = config.getAs[String]("agentRole"),
       delegatedAuthRule = config.getAs[String]("delegatedAuthRule"),
-      confidenceLevel = config.getAs[Int]("confidenceLevel").getOrElse(GlobalConfidenceLevel)
+      confidenceLevel = config.getAs[Int]("confidenceLevel").orElse(GlobalConfidenceLevel).getOrElse(throw NoConfidenceLevelError)
     )
   }
 
   def authConfig(controllerName: String): AuthConfig = {
-    controllerConfigs.as[Option[AuthConfig]](s"$controllerName.authParams").getOrElse(AuthConfig(confidenceLevel = GlobalConfidenceLevel))
+
+    controllerConfigs.as[Option[AuthConfig]](s"$controllerName.authParams").getOrElse(AuthConfig(confidenceLevel = GlobalConfidenceLevel.getOrElse(throw NoConfidenceLevelError)))
   }
 }
+
+class InvalidConfigurationException(msg: String) extends RuntimeException(msg)
