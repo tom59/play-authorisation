@@ -8,7 +8,7 @@ from microservices
 
 ### Confidence Level Configuration
 Confidence level for micro services can be configured in two ways. One option is to declare it at the controllers level so that it's applied to all controllers of the micro service
-The other option is specifying it for each controller. When the both global level and controller level are defined, the individual controller's confidence level takes precedence
+The other option is specifying it for each controller. When both global level and controller level are defined, the individual controller's confidence level takes precedence
 
 The valid Confidence Level values are 0, 100, 200, 300, 500
 

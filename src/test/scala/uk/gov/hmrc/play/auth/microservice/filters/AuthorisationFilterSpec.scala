@@ -202,7 +202,7 @@ class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with Sca
       override lazy val authConnector = testAuthConnector
     }
 
-    def authFilter(config:  Map[String, String] = Map.empty) = new TestAuthorisationFilter(config)
+    def authFilter() = new TestAuthorisationFilter()
 
     val authFilterWithAccountName = new TestAuthorisationFilter(Map("DelegateAuthController.authParams.account" -> "agent"))
   }

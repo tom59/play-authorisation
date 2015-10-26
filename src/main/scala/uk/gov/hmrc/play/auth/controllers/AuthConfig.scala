@@ -47,24 +47,23 @@ trait AuthParamsControllerConfig {
 
   private implicit val RegexValueReader: ValueReader[Regex] = StringReader.stringValueReader.map(_.r)
 
-  private lazy val NoConfidenceLevelError =  new InvalidConfigurationException("confidenceLevel must be set at either global controllers or individual controller level")
-
-  private implicit val authConfigReader = ValueReader.relative[AuthConfig] { config: Config =>
-    AuthConfig(
-      mode = config.getAs[String]("mode").getOrElse("identity"),
-      pattern = config.getAs[Regex]("pattern").getOrElse(AuthConfig.defaultPatternRegex),
-      anonymousLoginPattern = config.getAs[Regex]("anonymous.pattern").getOrElse(AuthConfig.defaultAnonymousPatternRegex),
-      servicePrefix = config.getAs[String]("servicePrefix").getOrElse(""),
-      account = config.getAs[String]("account"),
-      agentRole = config.getAs[String]("agentRole"),
-      delegatedAuthRule = config.getAs[String]("delegatedAuthRule"),
-      confidenceLevel = config.getAs[Int]("confidenceLevel").orElse(GlobalConfidenceLevel).getOrElse(throw NoConfidenceLevelError)
-    )
-  }
-
   def authConfig(controllerName: String): AuthConfig = {
+    implicit val authConfigReader = ValueReader.relative[AuthConfig] { config: Config =>
+      AuthConfig(
+        mode = config.getAs[String]("mode").getOrElse("identity"),
+        pattern = config.getAs[Regex]("pattern").getOrElse(AuthConfig.defaultPatternRegex),
+        anonymousLoginPattern = config.getAs[Regex]("anonymous.pattern").getOrElse(AuthConfig.defaultAnonymousPatternRegex),
+        servicePrefix = config.getAs[String]("servicePrefix").getOrElse(""),
+        account = config.getAs[String]("account"),
+        agentRole = config.getAs[String]("agentRole"),
+        delegatedAuthRule = config.getAs[String]("delegatedAuthRule"),
+        confidenceLevel = config.getAs[Int]("confidenceLevel").orElse(GlobalConfidenceLevel)
+          .getOrElse(throw new InvalidConfigurationException(s"confidenceLevel must be set at either global controllers or $controllerName level"))
+      )
+    }
 
-    controllerConfigs.as[Option[AuthConfig]](s"$controllerName.authParams").getOrElse(AuthConfig(confidenceLevel = GlobalConfidenceLevel.getOrElse(throw NoConfidenceLevelError)))
+    controllerConfigs.as[Option[AuthConfig]](s"$controllerName.authParams").getOrElse(AuthConfig(confidenceLevel = GlobalConfidenceLevel
+      .getOrElse(throw new InvalidConfigurationException(s"confidenceLevel must be set at either global controllers or $controllerName level"))))
   }
 }
 
