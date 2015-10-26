@@ -40,29 +40,29 @@ class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with Sca
     "extract (vat, 99999999) from /vat/99999999" in new SetUp {
       val verb = HttpVerb("GET")
       val resource = ResourceToAuthorise(verb, Regime("vat"), AccountId("99999999"))
-      authFilter().extractResource("/vat/99999999", verb, defaultAuthConfig) shouldBe Some(resource)
+      authFilter.extractResource("/vat/99999999", verb, defaultAuthConfig) shouldBe Some(resource)
     }
 
     "extract (vat, 99999999) from /vat/99999999/calendar" in new SetUp {
       val verb = HttpVerb("GET")
       val resource = ResourceToAuthorise(verb, Regime("vat"), AccountId("99999999"))
-      authFilter().extractResource("/vat/99999999/calendar", verb, defaultAuthConfig) shouldBe Some(resource)
+      authFilter.extractResource("/vat/99999999/calendar", verb, defaultAuthConfig) shouldBe Some(resource)
     }
 
     "extract (epaye, 840%2FMODE26A) from /epaye/840%2FMODE26A" in new SetUp {
       val verb = HttpVerb("GET")
       val resource = ResourceToAuthorise(verb, Regime("epaye"), AccountId("840%2FMODE26A"))
-      authFilter().extractResource("/epaye/840%2FMODE26A", verb, defaultAuthConfig) shouldBe Some(resource)
+      authFilter.extractResource("/epaye/840%2FMODE26A", verb, defaultAuthConfig) shouldBe Some(resource)
     }
 
     "extract (epaye, 840%2FMODE26A) from /epaye/840%2FMODE26A/account-summary" in new SetUp {
       val verb = HttpVerb("GET")
       val resource = ResourceToAuthorise(verb, Regime("epaye"), AccountId("840%2FMODE26A"))
-      authFilter().extractResource("/epaye/840%2FMODE26A/account-summary", verb, defaultAuthConfig) shouldBe Some(resource)
+      authFilter.extractResource("/epaye/840%2FMODE26A/account-summary", verb, defaultAuthConfig) shouldBe Some(resource)
     }
 
     "extract None from /ping" in new SetUp {
-      authFilter().extractResource("ping", HttpVerb("GET"), defaultAuthConfig) shouldBe None
+      authFilter.extractResource("ping", HttpVerb("GET"), defaultAuthConfig) shouldBe None
     }
   }
 
@@ -72,7 +72,7 @@ class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with Sca
       val verb = HttpVerb("GET")
       val ggAuthConfig = AuthConfig(pattern = "/(profile/auth/oid)/([\\w]+)[/]?".r, servicePrefix = "government-gateway-", confidenceLevel = 500)
       val resource = ResourceToAuthorise(verb, Regime("government-gateway-profile/auth/oid"), AccountId("08732408734"))
-      authFilter().extractResource("/profile/auth/oid/08732408734", verb, ggAuthConfig) shouldBe Some(resource)
+      authFilter.extractResource("/profile/auth/oid/08732408734", verb, ggAuthConfig) shouldBe Some(resource)
     }
   }
 
@@ -82,7 +82,7 @@ class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with Sca
       val verb = HttpVerb("GET")
       val authConfig = AuthConfig(mode = "passcode", confidenceLevel = 500)
       val resource = ResourceToAuthorise(verb, Regime("charities"))
-      authFilter().extractResource("/charities/blah", verb, authConfig) shouldBe Some(resource)
+      authFilter.extractResource("/charities/blah", verb, authConfig) shouldBe Some(resource)
     }
   }
 
@@ -101,7 +101,7 @@ class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with Sca
 
       val request = FakeRequest("GET", "/anaccount/anid/data", FakeHeaders(), "", tags = Map(ROUTE_VERB -> "GET", ROUTE_CONTROLLER -> "DelegateAuthController"))
 
-      val result = authFilter().apply((h: RequestHeader) => Future.successful(new Results.Status(200)))(request).futureValue
+      val result = authFilter.apply((h: RequestHeader) => Future.successful(new Results.Status(200)))(request).futureValue
 
       testAuthConnector.capture shouldBe Some(AuthCallCaptured(HttpVerb("GET"), Regime("anaccount"), Some(AccountId("anid")), AuthRequestParameters(agentRoleRequired = Some("admin"), delegatedAuthRule = Some("lp-paye"), confidenceLevel = ConfidenceLevel)))
     }
@@ -164,7 +164,7 @@ class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with Sca
     def filterRequest: Future[Result] = {
       val req = FakeRequest("GET", "/myregime/myId", FakeHeaders(), AnyContentAsEmpty, tags = Map(ROUTE_VERB -> "GET", ROUTE_CONTROLLER -> "DelegateAuthController"))
 
-      authFilter() ( (next: RequestHeader) => {
+      authFilter ( (next: RequestHeader) => {
         val isSurrogate = next.headers.get(HeaderNames.surrogate).contains("true")
         Future.successful(Results.Ok(if (isSurrogate) "All is surrogate" else "All is good"))
       })(req)
@@ -202,7 +202,7 @@ class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with Sca
       override lazy val authConnector = testAuthConnector
     }
 
-    def authFilter() = new TestAuthorisationFilter()
+    val authFilter = new TestAuthorisationFilter()
 
     val authFilterWithAccountName = new TestAuthorisationFilter(Map("DelegateAuthController.authParams.account" -> "agent"))
   }
