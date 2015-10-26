@@ -26,6 +26,7 @@ class AuthConfigSpec extends WordSpecLike with Matchers {
   val config = ConfigFactory.parseString(
     """
       |controllers {
+      |confidenceLevel = 0
       |  com.kenshoo.play.metrics.MetricsController {
       |    needsAuditing = false
       |  }
@@ -53,42 +54,78 @@ class AuthConfigSpec extends WordSpecLike with Matchers {
       |    needsAuth = true
       |    authParams = {
       |      pattern = "/(\\w*)/(\\d)/.*"
-      |      levelOfAssurance = "1.5"
+      |      confidenceLevel = 200
       |    }
       |  }
       |}
     """.stripMargin)
 
-  val configForDefaulLOA = ConfigFactory.parseString(
+
+  val InvalidConfig = ConfigFactory.parseString(
     """
       |controllers {
-      |  defaultLevelOfAssurance = "1"
+      |  uk.gov.hmrc.play.controllers.AbsentDelegateAuthController {
+      |    needsAuth = true
+      |    authParams = {
+      |      pattern = "/(\\w*)/(\\d)/.*"
+      |      confidenceLevel = 3333
+      |    }
+      |  }
       |}
     """.stripMargin)
+
+  val DefaultCL = ConfigFactory.parseString(
+    """
+      |controllers {
+      |  confidenceLevel = 100
+      |}
+    """.stripMargin)
+
+
+  val InvalidDefaultCL = ConfigFactory.parseString(
+    """
+      |controllers {
+      |  confidenceLevel = 56
+      |}
+    """.stripMargin)
+
+
+  val NoCL = ConfigFactory.parseString(
+    """
+      |controllers {
+      |  com.kenshoo.play.metrics.MetricsController {
+      |    needsAuditing = false
+      |    authParams = {
+      |      pattern = "/(\\w*)/(\\d)/.*"
+      |    }
+      |  }
+      |}
+    """.stripMargin)
+
 
   val cc = new AuthParamsControllerConfig {
     lazy val controllerConfigs = config.as[Config]("controllers")
   }
 
-  val ccForDefaultLOA = new AuthParamsControllerConfig {
-    lazy val controllerConfigs = configForDefaulLOA.as[Config]("controllers")
+  val ccForDefaultConfidenceLevel = new AuthParamsControllerConfig {
+    lazy val controllerConfigs = DefaultCL.as[Config]("controllers")
   }
 
   "controller config" should {
     "return the default auth pattern if none is configured" in {
-      cc.authConfig("com.kenshoo.play.metrics.MetricsController").pattern.toString() should be ("/([\\w]+)/([^/]+)/?.*")
+      cc.authConfig("com.kenshoo.play.metrics.MetricsController").pattern.toString() should be("/([\\w]+)/([^/]+)/?.*")
     }
     "return the default auth anonymous pattern if none is configured" in {
-      cc.authConfig("com.kenshoo.play.metrics.MetricsController").anonymousLoginPattern.toString() should be ("/([^/]+)/?.*")
+      cc.authConfig("com.kenshoo.play.metrics.MetricsController").anonymousLoginPattern.toString() should be("/([^/]+)/?.*")
     }
     "return the default auth mode if none is configured" in {
-      cc.authConfig("com.kenshoo.play.metrics.MetricsController").mode should be ("identity")
+      cc.authConfig("com.kenshoo.play.metrics.MetricsController").mode should be("identity")
     }
     "return the configured auth pattern" in {
-      cc.authConfig("com.kenshoo.play.metrics.AnotherController").pattern.toString() should be ("/(\\w*)/(\\d)/.*")
+      cc.authConfig("com.kenshoo.play.metrics.AnotherController").pattern.toString() should be("/(\\w*)/(\\d)/.*")
     }
     "throw an exception if the pattern does not compile" in {
-      an [Exception] should be thrownBy cc.authConfig("com.kenshoo.play.metrics.ControllerWithDodgyPattern")
+      an[Exception] should be thrownBy cc.authConfig("com.kenshoo.play.metrics.ControllerWithDodgyPattern")
     }
   }
 
@@ -108,21 +145,46 @@ class AuthConfigSpec extends WordSpecLike with Matchers {
       config.delegatedAuthRule shouldBe None
     }
 
-    "set defaultLevelOfAssurance to '2' when global defaultLevelOfAssurance is missing" in {
-      val config = cc.authConfig("uk.gov.hmrc.play.controllers.DelegateAuthController")
-      config.levelOfAssurance shouldBe LevelOfAssurance.LOA_2
+    "throw error when confidenceLevel is not set either at global  or controller level " in {
+      val cc = new AuthParamsControllerConfig {
+        lazy val controllerConfigs = NoCL.as[Config]("controllers")
+      }
+      an[Exception] shouldBe thrownBy {
+        cc.authConfig("com.kenshoo.play.metrics.MetricsController")
+      }
     }
 
-    "set defaultLevelOfAssurance to '1' at global level" in {
-      val config = ccForDefaultLOA.authConfig("uk.gov.hmrc.play.controllers.DelegateAuthController")
-      config.levelOfAssurance shouldBe LevelOfAssurance.LOA_1
+    "set confidenceLevel to 100  at global level" in {
+      val config = ccForDefaultConfidenceLevel.authConfig("uk.gov.hmrc.play.controllers.DelegateAuthController")
+      config.confidenceLevel shouldBe 100
     }
 
-    "set levelOfAssurance to '1.5' for the specific controller" in {
+    "set confidenceLevel to 200  for the specific controller" in {
       val config = cc.authConfig("uk.gov.hmrc.play.controllers.AbsentDelegateAuthController")
-      config.levelOfAssurance shouldBe LevelOfAssurance.LOA_1_5
+      config.confidenceLevel shouldBe 200
     }
 
+
+  }
+
+  "Invalid ConfidenceLevel values" should {
+    "be rejected when defined at global level" in {
+      val ccForDefaultConfidenceLevel = new AuthParamsControllerConfig {
+        lazy val controllerConfigs = InvalidDefaultCL.as[Config]("controllers")
+      }
+      an[IllegalArgumentException] shouldBe thrownBy {
+        ccForDefaultConfidenceLevel.authConfig("uk.gov.hmrc.play.controllers.DelegateAuthController")
+      }
+    }
+
+    "be rejected when defined at the controller level" in {
+      val cc = new AuthParamsControllerConfig {
+        lazy val controllerConfigs = InvalidConfig.as[Config]("controllers")
+      }
+      an[IllegalArgumentException] shouldBe thrownBy {
+        val conf = cc.authConfig("uk.gov.hmrc.play.controllers.AbsentDelegateAuthController")
+      }
+    }
 
   }
 }

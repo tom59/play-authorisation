@@ -80,7 +80,7 @@ trait AuthorisationFilter extends Filter {
         verb <- rh.tags.get(Routes.ROUTE_VERB).map(HttpVerb)
         resource <- extractResource(rh.path, verb, authConfig)
 
-      } yield authConnector.authorise(resource, AuthRequestParameters(authConfig.levelOfAssurance.toString,authConfig.agentRole, authConfig.delegatedAuthRule))
+      } yield authConnector.authorise(resource, AuthRequestParameters(authConfig.confidenceLevel,authConfig.agentRole, authConfig.delegatedAuthRule))
 
     result.map(_.getOrElse(Results.Unauthorized))
   }

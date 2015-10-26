@@ -6,26 +6,26 @@ A library used for communicating with the auth service to authorise requests
 from microservices
 
 
-### Assurance Level Configuration
-Level of assurance for micro services can be configured in two ways. One option is to configure at the controllers level so that it's applied to all controllers of the micro service
-The other option is fine configuring at each controller level. When both global level and controller level is defined, the individual controller level assurance takes precedence
+### Confidence Level Configuration
+Confidence level for micro services can be configured in two ways. One option is to declare it at the controllers level so that it's applied to all controllers of the micro service
+The other option is specifying it for each controller. When both global level and controller level are defined, the individual controller's confidence level takes precedence
 
-By default all the micro service will have assurance level of 2 if nothing is configured.
+The valid Confidence Level values are 0, 100, 200, 300, 500
 
 ## Global Level Configuration
-Add `defaultLevelOfAssurance` to `controllers` section of your application.conf
+Add `confidenceLevel` to `controllers` section of your application.conf
 
 Example
 ```json
 {
     controllers {
-      defaultLevelOfAssurance = "1"
+      confidenceLevel = 300
     }
 }
 ```
 
 ## Controller Level Configuration
-Add `levelOfAssurance` to `controllers` section of your application.conf
+Add `confidenceLevel` to `controllers` section of your application.conf
 
 Example
 ```json
@@ -34,7 +34,7 @@ Example
       YourController{
         needsAuth = true
         authParams {
-          levelOfAssurance = "1"
+          confidenceLevel = 100
         }
       }
     }

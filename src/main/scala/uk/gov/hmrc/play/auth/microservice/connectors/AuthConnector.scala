@@ -67,15 +67,13 @@ class Requirement[T](maybe: Option[T]) {
 }
 
 
-case class AuthRequestParameters(levelOfAssurance: String,
-                                 agentRoleRequired: Option[String] = None,
-                                 delegatedAuthRule: Option[String] = None) {
+case class AuthRequestParameters(confidenceLevel: Int, agentRoleRequired: Option[String] = None, delegatedAuthRule: Option[String] = None) {
   implicit def optionRequirement[T](maybe: Option[T]): Requirement[T] = new Requirement(maybe)
   require (agentRoleRequired.ifPresent(_.nonEmpty), "agentRoleRequired should not be empty")
   require (delegatedAuthRule.ifPresent(_.nonEmpty), "delegatedAuthRule should not be empty")
 
   def asQueryParams = {
-    val params = Seq(s"levelOfAssurance=$levelOfAssurance")++agentRoleRequired.map(v => s"agentRoleRequired=$v")++delegatedAuthRule.map(v => s"delegatedAuthRule=$v")
+    val params = Seq(s"confidenceLevel=$confidenceLevel")++agentRoleRequired.map(v => s"agentRoleRequired=$v")++delegatedAuthRule.map(v => s"delegatedAuthRule=$v")
     params.mkString("?", "&", "")
   }
 }
