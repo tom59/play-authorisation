@@ -18,7 +18,7 @@ package uk.gov.hmrc.play.auth.microservice.filters
 
 import play.api.Routes
 import play.api.mvc._
-import uk.gov.hmrc.play.audit.http.HeaderCarrier
+import uk.gov.hmrc.play.http.HeaderCarrier
 import uk.gov.hmrc.play.auth.controllers.{AuthParamsControllerConfig, AuthConfig}
 import uk.gov.hmrc.play.auth.microservice.connectors._
 import uk.gov.hmrc.play.http.HeaderNames

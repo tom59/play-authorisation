@@ -38,7 +38,7 @@ private object BuildDependencies {
   import play.PlayImport._
   import play.core.PlayVersion
 
-  val httpVerbsVersion = "2.2.1"
+  val httpVerbsVersion = "3.0.0"
 
   object Compile {
     val playFramework = "com.typesafe.play" %% "play" % PlayVersion.current % "provided"
