@@ -23,7 +23,7 @@ import org.scalatest.{Matchers => MatchersResults, WordSpecLike}
 import play.api.mvc.{AnyContentAsEmpty, RequestHeader, Result, Results}
 import play.api.test.Helpers._
 import play.api.test.{FakeHeaders, FakeRequest}
-import uk.gov.hmrc.play.audit.http.HeaderCarrier
+import uk.gov.hmrc.play.http.HeaderCarrier
 import uk.gov.hmrc.play.auth.controllers.{AuthConfig, AuthParamsControllerConfig}
 import uk.gov.hmrc.play.auth.microservice.connectors.{AuthConnector, AuthRequestParameters, _}
 import uk.gov.hmrc.play.http.HeaderNames
