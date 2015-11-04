@@ -17,6 +17,7 @@
 package uk.gov.hmrc.play.auth.microservice.connectors
 
 import play.api.libs.iteratee.Enumerator
+import play.api.libs.json._
 import play.api.libs.ws.WSResponse
 import play.api.mvc.{ResponseHeader, Result}
 import uk.gov.hmrc.play.http.HeaderCarrier
@@ -24,6 +25,7 @@ import uk.gov.hmrc.play.connectors.Connector
 import uk.gov.hmrc.play.http.logging.ConnectionTracing
 
 import scala.concurrent.Future
+import scala.util.{Failure, Success, Try}
 
 case class HttpVerb(method: String) extends AnyVal
 
@@ -62,12 +64,50 @@ case class AccountId(value: String) extends AnyVal {
   override def toString: String = value
 }
 
+
+sealed abstract class ConfidenceLevel(val level: Int) extends Ordered[ConfidenceLevel] {
+  def compare(that: ConfidenceLevel) = this.level.compare(that.level)
+  override val toString = level.toString
+}
+
+object ConfidenceLevel {
+  case object L500 extends ConfidenceLevel(500)
+  case object L300 extends ConfidenceLevel(300)
+  case object L200 extends ConfidenceLevel(200)
+  case object L100 extends ConfidenceLevel(100)
+  case object L50 extends ConfidenceLevel(50)
+  case object L0 extends ConfidenceLevel(0)
+
+  val all = Set(L0, L50, L100, L200, L300, L500)
+
+  def fromInt(level: Int): ConfidenceLevel = level match {
+    case 500 => L500
+    case 300 => L300
+    case 200 => L200
+    case 100 => L100
+    case 50  => L50
+    case 0   => L0
+    case _   => throw new NoSuchElementException(s"Illegal confidence level: $level")
+  }
+
+  implicit val format: Format[ConfidenceLevel] = {
+    val reads = Reads[ConfidenceLevel] { json =>
+      Try { fromInt(json.as[Int]) } match {
+        case Success(level) => JsSuccess(level)
+        case Failure(ex) => JsError(ex.getMessage)
+      }
+    }
+    val writes = Writes[ConfidenceLevel] { level => JsNumber(level.level) }
+    Format(reads, writes)
+  }
+}
+
 class Requirement[T](maybe: Option[T]) {
   def ifPresent(test: T => Boolean): Boolean = maybe.fold(true)(test)
 }
 
 
-case class AuthRequestParameters(confidenceLevel: Int, agentRoleRequired: Option[String] = None, delegatedAuthRule: Option[String] = None) {
+case class AuthRequestParameters(confidenceLevel: ConfidenceLevel, agentRoleRequired: Option[String] = None, delegatedAuthRule: Option[String] = None) {
   implicit def optionRequirement[T](maybe: Option[T]): Requirement[T] = new Requirement(maybe)
   require (agentRoleRequired.ifPresent(_.nonEmpty), "agentRoleRequired should not be empty")
   require (delegatedAuthRule.ifPresent(_.nonEmpty), "delegatedAuthRule should not be empty")

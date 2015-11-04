@@ -17,6 +17,7 @@
 package uk.gov.hmrc.play.auth.controllers
 
 import org.scalatest.{Matchers, WordSpecLike}
+import uk.gov.hmrc.play.auth.microservice.connectors.ConfidenceLevel
 
 class AuthConfigSpec extends WordSpecLike with Matchers {
 
@@ -26,7 +27,7 @@ class AuthConfigSpec extends WordSpecLike with Matchers {
   val config = ConfigFactory.parseString(
     """
       |controllers {
-      |confidenceLevel = 0
+      |  confidenceLevel = 0
       |  com.kenshoo.play.metrics.MetricsController {
       |    needsAuditing = false
       |  }
@@ -94,14 +95,13 @@ class AuthConfigSpec extends WordSpecLike with Matchers {
     """
       |controllers {
       |  com.kenshoo.play.metrics.MetricsController {
-      |    needsAuditing = false
+      |    needsAuditing = true
       |    authParams = {
       |      pattern = "/(\\w*)/(\\d)/.*"
       |    }
       |  }
       |}
     """.stripMargin)
-
 
   val cc = new AuthParamsControllerConfig {
     lazy val controllerConfigs = config.as[Config]("controllers")
@@ -156,15 +156,13 @@ class AuthConfigSpec extends WordSpecLike with Matchers {
 
     "set confidenceLevel to 100  at global level" in {
       val config = ccForDefaultConfidenceLevel.authConfig("uk.gov.hmrc.play.controllers.DelegateAuthController")
-      config.confidenceLevel shouldBe 100
+      config.confidenceLevel shouldBe ConfidenceLevel.L100
     }
 
     "set confidenceLevel to 200  for the specific controller" in {
       val config = cc.authConfig("uk.gov.hmrc.play.controllers.AbsentDelegateAuthController")
-      config.confidenceLevel shouldBe 200
+      config.confidenceLevel shouldBe ConfidenceLevel.L200
     }
-
-
   }
 
   "Invalid ConfidenceLevel values" should {
@@ -172,7 +170,7 @@ class AuthConfigSpec extends WordSpecLike with Matchers {
       val ccForDefaultConfidenceLevel = new AuthParamsControllerConfig {
         lazy val controllerConfigs = InvalidDefaultCL.as[Config]("controllers")
       }
-      an[IllegalArgumentException] shouldBe thrownBy {
+      an[Exception] shouldBe thrownBy {
         ccForDefaultConfidenceLevel.authConfig("uk.gov.hmrc.play.controllers.DelegateAuthController")
       }
     }
@@ -181,7 +179,7 @@ class AuthConfigSpec extends WordSpecLike with Matchers {
       val cc = new AuthParamsControllerConfig {
         lazy val controllerConfigs = InvalidConfig.as[Config]("controllers")
       }
-      an[IllegalArgumentException] shouldBe thrownBy {
+      an[Exception] shouldBe thrownBy {
         val conf = cc.authConfig("uk.gov.hmrc.play.controllers.AbsentDelegateAuthController")
       }
     }

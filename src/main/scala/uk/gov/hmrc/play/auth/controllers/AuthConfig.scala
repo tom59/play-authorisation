@@ -16,6 +16,8 @@
 
 package uk.gov.hmrc.play.auth.controllers
 
+import uk.gov.hmrc.play.auth.microservice.connectors.ConfidenceLevel
+
 import scala.util.matching.Regex
 
 case class AuthConfig(mode: String = "identity",
@@ -25,9 +27,7 @@ case class AuthConfig(mode: String = "identity",
                       account: Option[String] = None,
                       agentRole: Option[String] = None,
                       delegatedAuthRule: Option[String] = None,
-                      confidenceLevel: Int) {
-  val clValues = Seq(0, 100, 200, 300, 500)
-  require(clValues.contains(confidenceLevel), s"Invalid confidence level $confidenceLevel expected one of ${clValues.mkString(",")}")
+                      confidenceLevel: ConfidenceLevel) {
 }
 
 object AuthConfig {
@@ -39,13 +39,14 @@ trait AuthParamsControllerConfig {
 
   import com.typesafe.config.Config
   import net.ceedubs.ficus.Ficus._
-  import net.ceedubs.ficus.readers.{StringReader, ValueReader}
+  import net.ceedubs.ficus.readers.{StringReader, ValueReader, AnyValReaders}
 
   def controllerConfigs: Config
 
-  private lazy val GlobalConfidenceLevel: Option[Int] = controllerConfigs.getAs[Int]("confidenceLevel")
-
+  private implicit val ConfidenceLevelValueReader: ValueReader[ConfidenceLevel] = AnyValReaders.intValueReader.map(ConfidenceLevel.fromInt)
   private implicit val RegexValueReader: ValueReader[Regex] = StringReader.stringValueReader.map(_.r)
+
+  private lazy val globalConfidenceLevel: Option[ConfidenceLevel] = controllerConfigs.getAs[ConfidenceLevel]("confidenceLevel")
 
   def authConfig(controllerName: String): AuthConfig = {
     implicit val authConfigReader = ValueReader.relative[AuthConfig] { config: Config =>
@@ -57,12 +58,12 @@ trait AuthParamsControllerConfig {
         account = config.getAs[String]("account"),
         agentRole = config.getAs[String]("agentRole"),
         delegatedAuthRule = config.getAs[String]("delegatedAuthRule"),
-        confidenceLevel = config.getAs[Int]("confidenceLevel").orElse(GlobalConfidenceLevel)
+        confidenceLevel = config.getAs[ConfidenceLevel]("confidenceLevel").orElse(globalConfidenceLevel)
           .getOrElse(throw new InvalidConfigurationException(s"confidenceLevel must be set at either global controllers or $controllerName level"))
       )
     }
 
-    controllerConfigs.as[Option[AuthConfig]](s"$controllerName.authParams").getOrElse(AuthConfig(confidenceLevel = GlobalConfidenceLevel
+    controllerConfigs.as[Option[AuthConfig]](s"$controllerName.authParams").getOrElse(AuthConfig(confidenceLevel = globalConfidenceLevel
       .getOrElse(throw new InvalidConfigurationException(s"confidenceLevel must be set at either global controllers or $controllerName level"))))
   }
 }

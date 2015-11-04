@@ -35,7 +35,7 @@ class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with Sca
 
  
   "AuthorisationFilter.extractAccountAndAccountId with default AuthConfig" should {
-    val defaultAuthConfig = AuthConfig(confidenceLevel = 500)
+    val defaultAuthConfig = AuthConfig(confidenceLevel = ConfidenceLevel.L500)
 
     "extract (vat, 99999999) from /vat/99999999" in new SetUp {
       val verb = HttpVerb("GET")
@@ -70,7 +70,7 @@ class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with Sca
 
     "extract (government-gateway-profile/auth/oid, 08732408734) from /profile/auth/oid/08732408734 as special case for government gateway" in new SetUp {
       val verb = HttpVerb("GET")
-      val ggAuthConfig = AuthConfig(pattern = "/(profile/auth/oid)/([\\w]+)[/]?".r, servicePrefix = "government-gateway-", confidenceLevel = 500)
+      val ggAuthConfig = AuthConfig(pattern = "/(profile/auth/oid)/([\\w]+)[/]?".r, servicePrefix = "government-gateway-", confidenceLevel = ConfidenceLevel.L500)
       val resource = ResourceToAuthorise(verb, Regime("government-gateway-profile/auth/oid"), AccountId("08732408734"))
       authFilter.extractResource("/profile/auth/oid/08732408734", verb, ggAuthConfig) shouldBe Some(resource)
     }
@@ -80,7 +80,7 @@ class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with Sca
 
     "extract (charities, None) from /charities/auth as special case for charities" in new SetUp {
       val verb = HttpVerb("GET")
-      val authConfig = AuthConfig(mode = "passcode", confidenceLevel = 500)
+      val authConfig = AuthConfig(mode = "passcode", confidenceLevel = ConfidenceLevel.L500)
       val resource = ResourceToAuthorise(verb, Regime("charities"))
       authFilter.extractResource("/charities/blah", verb, authConfig) shouldBe Some(resource)
     }
@@ -94,7 +94,16 @@ class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with Sca
 
       val result = authFilterWithAccountName.apply((h: RequestHeader) => Future.successful(new Results.Status(200)))(request).futureValue
 
-      testAuthConnector.capture shouldBe Some(AuthCallCaptured(HttpVerb("GET"), Regime("agent"), Some(AccountId("anid")), AuthRequestParameters(agentRoleRequired = Some("admin"), delegatedAuthRule = Some("lp-paye"), confidenceLevel = ConfidenceLevel)))
+      testAuthConnector.capture shouldBe Some(AuthCallCaptured(
+        HttpVerb("GET"),
+        Regime("agent"),
+        Some(AccountId("anid")),
+        AuthRequestParameters(
+          agentRoleRequired = Some("admin"),
+          delegatedAuthRule = Some("lp-paye"),
+          confidenceLevel = ConfidenceLevel.L100
+        )
+      ))
     }
 
     "not override the account name if not specified in the controller config and pass the account from the url and accountId to the auth connector" in new SetUp {
@@ -103,7 +112,7 @@ class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with Sca
 
       val result = authFilter.apply((h: RequestHeader) => Future.successful(new Results.Status(200)))(request).futureValue
 
-      testAuthConnector.capture shouldBe Some(AuthCallCaptured(HttpVerb("GET"), Regime("anaccount"), Some(AccountId("anid")), AuthRequestParameters(agentRoleRequired = Some("admin"), delegatedAuthRule = Some("lp-paye"), confidenceLevel = ConfidenceLevel)))
+      testAuthConnector.capture shouldBe Some(AuthCallCaptured(HttpVerb("GET"), Regime("anaccount"), Some(AccountId("anid")), AuthRequestParameters(agentRoleRequired = Some("admin"), delegatedAuthRule = Some("lp-paye"), confidenceLevel = ConfidenceLevel.L100)))
     }
   }
 
@@ -114,7 +123,7 @@ class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with Sca
       status(result) shouldBe 200
       contentAsString(result) shouldBe "All is good"
 
-      testAuthConnector.capture.map(_.authRequestParameters.confidenceLevel) shouldBe Some(ConfidenceLevel)
+      testAuthConnector.capture.map(_.authRequestParameters.confidenceLevel) shouldBe Some(ConfidenceLevel.L100)
     }
 
     "return 401 if auth returns 401" in new SetUp(Results.Unauthorized) {
@@ -159,8 +168,6 @@ class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with Sca
 
   class SetUp(connectorResult: Result = Results.Ok) {
 
-    val ConfidenceLevel = 100
-
     def filterRequest: Future[Result] = {
       val req = FakeRequest("GET", "/myregime/myId", FakeHeaders(), AnyContentAsEmpty, tags = Map(ROUTE_VERB -> "GET", ROUTE_CONTROLLER -> "DelegateAuthController"))
 
@@ -191,7 +198,7 @@ class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with Sca
       private val configMap = Map(
         "DelegateAuthController.authParams.agentRole" -> "admin",
         "DelegateAuthController.authParams.delegatedAuthRule" -> "lp-paye",
-        "DelegateAuthController.authParams.confidenceLevel" -> ConfidenceLevel.toString
+        "DelegateAuthController.authParams.confidenceLevel" -> "100"
       )
 
       override val authParamsConfig =
