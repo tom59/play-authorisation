@@ -19,7 +19,7 @@ package uk.gov.hmrc.play.auth.microservice.connectors
 import play.api.libs.iteratee.Enumerator
 import play.api.libs.ws.WSResponse
 import play.api.mvc.{ResponseHeader, Result}
-import uk.gov.hmrc.play.audit.http.HeaderCarrier
+import uk.gov.hmrc.play.http.HeaderCarrier
 import uk.gov.hmrc.play.connectors.Connector
 import uk.gov.hmrc.play.http.logging.ConnectionTracing
 
