@@ -38,12 +38,10 @@ private object BuildDependencies {
   import play.PlayImport._
   import play.core.PlayVersion
 
-  val httpVerbsVersion = "3.0.0"
-
   object Compile {
     val playFramework = "com.typesafe.play" %% "play" % PlayVersion.current % "provided"
     val playWS = ws % "provided"
-    val httpVerbs = "uk.gov.hmrc" %% "http-verbs" % httpVerbsVersion % "provided"
+    val httpVerbs = "uk.gov.hmrc" %% "http-verbs" % "3.3.0" % "provided"
     val ficus = "net.ceedubs" %% "ficus" % "1.1.1"
   }
 
