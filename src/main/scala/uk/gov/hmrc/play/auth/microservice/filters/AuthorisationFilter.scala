@@ -16,10 +16,10 @@
 
 package uk.gov.hmrc.play.auth.microservice.filters
 
-import play.api.Routes
+import play.Routes
 import play.api.mvc._
 import uk.gov.hmrc.play.http.HeaderCarrier
-import uk.gov.hmrc.play.auth.controllers.{AuthParamsControllerConfig, AuthConfig}
+import uk.gov.hmrc.play.auth.controllers.{AuthConfig, AuthParamsControllerConfig}
 import uk.gov.hmrc.play.auth.microservice.connectors._
 import uk.gov.hmrc.play.http.HeaderNames
 import uk.gov.hmrc.play.http.logging.LoggingDetails
@@ -60,15 +60,10 @@ trait AuthorisationFilter extends Filter {
   }
 
   private def appendSurrogateHeader(rh: RequestHeader, response : Result ): RequestHeader = {
-    val existingHeaders = rh.headers.toMap
-    val newHeaders = new Headers {
-      val data: Seq[(String, Seq[String])] =
-        response.header.headers.get(HeaderNames.surrogate).fold(existingHeaders.toSeq) {
-          case "true" => existingHeaders.toSeq ++ Seq(HeaderNames.surrogate -> Seq("true"))
-          case _ => existingHeaders.toSeq
-        }
+    response.header.headers.get(HeaderNames.surrogate).fold(rh) {
+      case "true" => rh.copy(headers = rh.headers.add(HeaderNames.surrogate -> "true"))
+      case _ => rh
     }
-    rh.copy(headers = newHeaders)
   }
 
   private implicit def sequence[T](of: Option[Future[T]])(implicit ld: LoggingDetails): Future[Option[T]] =

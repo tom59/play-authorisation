@@ -16,10 +16,12 @@
 
 package uk.gov.hmrc.play.auth.microservice.filters
 
-import _root_.play.api.Routes._
+import _root_.play.Routes._
+import akka.actor.ActorSystem
+import akka.stream.{ActorMaterializer, Materializer}
 import com.typesafe.config.{Config, ConfigFactory}
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{Matchers => MatchersResults, WordSpecLike}
+import org.scalatest.{WordSpecLike, Matchers => MatchersResults}
 import play.api.mvc.{AnyContentAsEmpty, RequestHeader, Result, Results}
 import play.api.test.Helpers._
 import play.api.test.{FakeHeaders, FakeRequest}
@@ -33,7 +35,9 @@ import scala.concurrent.Future
 
 class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with ScalaFutures {
 
- 
+  implicit val system = ActorSystem()
+  implicit val materializer = ActorMaterializer()
+
   "AuthorisationFilter.extractAccountAndAccountId with default AuthConfig" should {
     val defaultAuthConfig = AuthConfig(confidenceLevel = ConfidenceLevel.L500)
 
@@ -211,6 +215,8 @@ class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with Sca
         }
 
       override lazy val authConnector = testAuthConnector
+
+      override implicit def mat: Materializer = materializer
     }
 
     val authFilter = new TestAuthorisationFilter()

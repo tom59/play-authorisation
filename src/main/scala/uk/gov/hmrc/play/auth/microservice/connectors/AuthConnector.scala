@@ -16,12 +16,13 @@
 
 package uk.gov.hmrc.play.auth.microservice.connectors
 
+import play.api.http.HttpEntity
 import play.api.libs.iteratee.Enumerator
 import play.api.libs.json._
 import play.api.libs.ws.WSResponse
 import play.api.mvc.{ResponseHeader, Result}
 import uk.gov.hmrc.play.http.HeaderCarrier
-import uk.gov.hmrc.play.connectors.Connector
+import uk.gov.hmrc.play.connectors.{Connector, PlayWSRequestBuilder}
 import uk.gov.hmrc.play.http.logging.ConnectionTracing
 
 import scala.concurrent.Future
@@ -120,7 +121,7 @@ case class AuthRequestParameters(confidenceLevel: ConfidenceLevel, agentRoleRequ
   }
 }
 
-trait AuthConnector extends Connector with ConnectionTracing {
+trait AuthConnector extends PlayWSRequestBuilder with ConnectionTracing {
   import uk.gov.hmrc.play.http.logging.MdcLoggingExecutionContext._
 
   def authBaseUrl: String
@@ -131,7 +132,7 @@ trait AuthConnector extends Connector with ConnectionTracing {
       val headers = response.allHeaders map {
         h => (h._1, h._2.head)
       }
-      Result(ResponseHeader(response.status, headers), Enumerator(Array()))
+      Result(ResponseHeader(response.status, headers), HttpEntity.NoEntity)
     }
   }
 
