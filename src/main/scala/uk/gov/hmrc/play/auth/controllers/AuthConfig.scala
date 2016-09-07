@@ -27,6 +27,7 @@ case class AuthConfig(mode: String = "identity",
                       account: Option[String] = None,
                       agentRole: Option[String] = None,
                       delegatedAuthRule: Option[String] = None,
+                      enrolment: Option[String] = None,
                       confidenceLevel: ConfidenceLevel) {
 }
 
@@ -58,6 +59,7 @@ trait AuthParamsControllerConfig {
         account = config.getAs[String]("account"),
         agentRole = config.getAs[String]("agentRole"),
         delegatedAuthRule = config.getAs[String]("delegatedAuthRule"),
+        enrolment = config.getAs[String]("enrolment"),
         confidenceLevel = config.getAs[ConfidenceLevel]("confidenceLevel").orElse(globalConfidenceLevel)
           .getOrElse(throw new InvalidConfigurationException(s"confidenceLevel must be set at either global controllers or $controllerName level"))
       )

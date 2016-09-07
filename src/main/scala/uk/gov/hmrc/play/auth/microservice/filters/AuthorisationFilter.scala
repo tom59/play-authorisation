@@ -89,6 +89,7 @@ trait AuthorisationFilter extends Filter {
     authConfig.mode match {
       case "identity" => extractIdentityResource(pathString, verb, authConfig)
       case "passcode" => extractPasscodeResource(pathString, verb, authConfig)
+      case "enrolment" => extractEnrolmentResource(pathString, verb, authConfig)
     }
 
   private def extractIdentityResource(pathString: String, verb: HttpVerb, authConfig: AuthConfig): Option[ResourceToAuthorise] = {
@@ -96,7 +97,7 @@ trait AuthorisationFilter extends Filter {
     pathString match {
       case authConfig.pattern(urlAccount, id) =>
         val reconciledAccount = authConfig.account.getOrElse(urlAccount)
-        Some(ResourceToAuthorise(verb, Regime(authConfig.servicePrefix + reconciledAccount), AccountId(id)))
+        Some(RegimeAndIdResourceToAuthorise(verb, Regime(authConfig.servicePrefix + reconciledAccount), AccountId(id)))
       case _ => None
     }
   }
@@ -106,8 +107,12 @@ trait AuthorisationFilter extends Filter {
     pathString match {
       case authConfig.anonymousLoginPattern(urlAccount) =>
         val reconciledAccount = authConfig.account.getOrElse(urlAccount)
-        Some(ResourceToAuthorise(verb, Regime(authConfig.servicePrefix + reconciledAccount)))
+        Some(RegimeResourceToAuthorise(verb, Regime(authConfig.servicePrefix + reconciledAccount)))
       case _ => None
     }
+  }
+
+  private def extractEnrolmentResource(pathString: String, verb: HttpVerb, authConfig: AuthConfig): Option[ResourceToAuthorise] = {
+    authConfig.enrolment.map(EnrolmentToAuthorise)
   }
 }
