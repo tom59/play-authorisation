@@ -65,6 +65,14 @@ class AuthConnectorSpec extends WordSpecLike with Matchers with MockitoSugar wit
     "generate a url for role and rule based agent authorisation" in {
       RegimeAndIdResourceToAuthorise(HttpVerb("GET"), Regime("agent"), AccountId("testid")).buildUrl(authBaseUrl, AuthRequestParameters(confidenceLevel, agentRoleRequired = Some("admin"), delegatedAuthRule = Some("lp-paye"))) shouldBe s"authBase/authorise/read/agent/testid?confidenceLevel=$confidenceLevel&agentRoleRequired=admin&delegatedAuthRule=lp-paye"
     }
+
+    "generate a url for role , rule based agent authorisation and privileged access" in {
+      RegimeAndIdResourceToAuthorise(HttpVerb("GET"), Regime("agent"), AccountId("testid")).
+        buildUrl(authBaseUrl, AuthRequestParameters(confidenceLevel, agentRoleRequired = Some("admin"), delegatedAuthRule = Some("lp-paye"), privilegedAccess = Some("foo"))) shouldBe s"authBase/authorise/read/agent/testid?confidenceLevel=$confidenceLevel&agentRoleRequired=admin&delegatedAuthRule=lp-paye&privilegedAccess=foo"
+    }
+    "generate a url for privileged access " in {
+      RegimeAndIdResourceToAuthorise(HttpVerb("GET"), Regime("agent"), AccountId("testid")).buildUrl(authBaseUrl, AuthRequestParameters(confidenceLevel, privilegedAccess = Some("foo"))) shouldBe s"authBase/authorise/read/agent/testid?confidenceLevel=$confidenceLevel&privilegedAccess=foo"
+    }
   }
 
 
@@ -99,6 +107,12 @@ class AuthConnectorSpec extends WordSpecLike with Matchers with MockitoSugar wit
       val resourceToAuthorise = RegimeAndIdResourceToAuthorise(HttpVerb("GET"), Regime("foo"), AccountId("testid"))
       authConnector.authorise(resourceToAuthorise, AuthRequestParameters(confidenceLevel))(new HeaderCarrier)
       authConnector.calledUrl shouldBe Some(s"authBase/authorise/read/foo/testid?confidenceLevel=$confidenceLevel")
+    }
+
+    "invoke callAuth with accountId and privileged access" in {
+      val resourceToAuthorise = RegimeAndIdResourceToAuthorise(HttpVerb("GET"), Regime("foo"), AccountId("testid"))
+      authConnector.authorise(resourceToAuthorise, AuthRequestParameters(confidenceLevel, privilegedAccess = Some("foo")))(new HeaderCarrier)
+      authConnector.calledUrl shouldBe Some(s"authBase/authorise/read/foo/testid?confidenceLevel=$confidenceLevel&privilegedAccess=foo")
     }
 
     "invoke callAuth without accountId" in {
