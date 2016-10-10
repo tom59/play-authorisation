@@ -29,30 +29,32 @@ import scala.util.{Failure, Success, Try}
 
 case class HttpVerb(method: String) extends AnyVal
 
-case class ResourceToAuthorise(method: HttpVerb, regime: Regime, accountId: Option[AccountId]) {
+trait ResourceToAuthorise {
 
-  def buildUrl(authBaseUrl: String, authRequestParameters: AuthRequestParameters): String = {
-    accountId.fold(s"$authBaseUrl/authorise/${action(method)}/$regime${authRequestParameters.asQueryParams}"){
-      accId => s"$authBaseUrl/authorise/${action(method)}/$regime/$accId${authRequestParameters.asQueryParams}"
-    }
-  }
+  def buildUrl(authBaseUrl: String, authRequestParameters: AuthRequestParameters): String
 
-  private def action(method: HttpVerb) =
+  protected def action(method: HttpVerb) =
     method.method.toUpperCase match {
       case "GET" | "HEAD" => "read"
       case _ => "write"
     }
-
 }
 
-object ResourceToAuthorise {
-
-  def apply(method: HttpVerb, regime: Regime): ResourceToAuthorise = {
-    ResourceToAuthorise(method, regime, None)
+case class RegimeAndIdResourceToAuthorise(method: HttpVerb, regime: Regime, accountId: AccountId) extends ResourceToAuthorise {
+  def buildUrl(authBaseUrl: String, authRequestParameters: AuthRequestParameters): String = {
+      s"$authBaseUrl/authorise/${action(method)}/$regime/$accountId${authRequestParameters.asQueryParams}"
   }
+}
 
-  def apply(method: HttpVerb, regime: Regime, accountId: AccountId): ResourceToAuthorise = {
-    ResourceToAuthorise(method, regime, Some(accountId))
+case class RegimeResourceToAuthorise(method: HttpVerb, regime: Regime) extends ResourceToAuthorise {
+  def buildUrl(authBaseUrl: String, authRequestParameters: AuthRequestParameters): String = {
+    s"$authBaseUrl/authorise/${action(method)}/$regime${authRequestParameters.asQueryParams}"
+  }
+}
+
+case class EnrolmentToAuthorise(permission: String) extends ResourceToAuthorise {
+  def buildUrl(authBaseUrl: String, authRequestParameters: AuthRequestParameters): String = {
+    s"$authBaseUrl/authorise/enrolment/$permission${authRequestParameters.asQueryParams}"
   }
 }
 
@@ -107,13 +109,13 @@ class Requirement[T](maybe: Option[T]) {
 }
 
 
-case class AuthRequestParameters(confidenceLevel: ConfidenceLevel, agentRoleRequired: Option[String] = None, delegatedAuthRule: Option[String] = None) {
+case class AuthRequestParameters(confidenceLevel: ConfidenceLevel, agentRoleRequired: Option[String] = None, delegatedAuthRule: Option[String] = None, privilegedAccess: Option[String] = None) {
   implicit def optionRequirement[T](maybe: Option[T]): Requirement[T] = new Requirement(maybe)
   require (agentRoleRequired.ifPresent(_.nonEmpty), "agentRoleRequired should not be empty")
   require (delegatedAuthRule.ifPresent(_.nonEmpty), "delegatedAuthRule should not be empty")
 
   def asQueryParams = {
-    val params = Seq(s"confidenceLevel=$confidenceLevel")++agentRoleRequired.map(v => s"agentRoleRequired=$v")++delegatedAuthRule.map(v => s"delegatedAuthRule=$v")
+    val params = Seq(s"confidenceLevel=$confidenceLevel")++agentRoleRequired.map(v => s"agentRoleRequired=$v")++delegatedAuthRule.map(v => s"delegatedAuthRule=$v") ++privilegedAccess.map(v => s"privilegedAccess=$v")
     params.mkString("?", "&", "")
   }
 }
