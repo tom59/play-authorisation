@@ -27,7 +27,6 @@ object HmrcBuild extends Build {
         Test.scalaTest,
         Test.pegdown,
         Test.playTest,
-        Test.httpVerbsTest,
         Test.mockito
       ),
       Developers()
@@ -42,7 +41,7 @@ private object BuildDependencies {
   object Compile {
     val playFramework = "com.typesafe.play" %% "play" % PlayVersion.current % "provided"
     val playWS = ws % "provided"
-    val httpVerbs = "uk.gov.hmrc" %% "http-verbs" % "6.0.0" % "provided"
+    val httpVerbs = "uk.gov.hmrc" %% "http-verbs" % "6.1.0" % "provided"
     val ficus = "net.ceedubs" %% "ficus" % "1.1.1"
   }
 
@@ -50,7 +49,6 @@ private object BuildDependencies {
     val scalaTest = "org.scalatest" %% "scalatest" % "2.2.4" % scope
     val pegdown = "org.pegdown" % "pegdown" % "1.5.0" % scope
     val playTest = "com.typesafe.play" %% "play-test" % PlayVersion.current % scope
-    val httpVerbsTest = "uk.gov.hmrc" %% "http-verbs-test" % "0.1.0" % scope
     val mockito = "org.mockito" % "mockito-core" % "1.9.0" % scope
   }
 
