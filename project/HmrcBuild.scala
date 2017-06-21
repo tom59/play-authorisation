@@ -41,7 +41,7 @@ private object BuildDependencies {
   object Compile {
     val playFramework = "com.typesafe.play" %% "play" % PlayVersion.current % "provided"
     val playWS = ws % "provided"
-    val httpVerbs = "uk.gov.hmrc" %% "http-verbs" % "6.3.0" % "provided"
+    val httpVerbs = "uk.gov.hmrc" %% "http-verbs" % "6.4.0" % "provided"
     val ficus = "net.ceedubs" %% "ficus" % "1.1.1"
   }
 
