@@ -25,13 +25,12 @@ import org.scalatest.{WordSpecLike, Matchers => MatchersResults}
 import play.api.mvc.{AnyContentAsEmpty, RequestHeader, Result, Results}
 import play.api.test.Helpers._
 import play.api.test.{FakeHeaders, FakeRequest}
-import uk.gov.hmrc.play.http.HeaderCarrier
+import uk.gov.hmrc.http.{HeaderCarrier, HeaderNames, HttpReads}
 import uk.gov.hmrc.play.auth.controllers.{AuthConfig, AuthParamsControllerConfig}
 import uk.gov.hmrc.play.auth.microservice.connectors.{AuthConnector, AuthRequestParameters, _}
-import uk.gov.hmrc.play.http.HeaderNames
 
 import scala.collection.JavaConversions._
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with ScalaFutures {
 
@@ -192,10 +191,13 @@ class AuthorisationFilterSpec extends WordSpecLike with MatchersResults with Sca
 
       override def authBaseUrl = "authBaseUrl"
 
-      override def authorise(resource: ResourceToAuthorise, authRequestParameters: AuthRequestParameters)(implicit hc: HeaderCarrier): Future[Result] = {
+      override def authorise(resource: ResourceToAuthorise, authRequestParameters: AuthRequestParameters)(implicit hc: HeaderCarrier, ec: ExecutionContext): Future[Result] = {
         this.capture = Some(resource.buildUrl(authBaseUrl, authRequestParameters))
         Future.successful(connectorResult)
       }
+
+      override def GET[A](url: String)(implicit rds: HttpReads[A], hc: HeaderCarrier, ec: ExecutionContext): Future[A] = ???
+      override def GET[A](url: String, queryParams: Seq[(String, String)])(implicit rds: HttpReads[A], hc: HeaderCarrier, ec: ExecutionContext): Future[A] = ???
     }
 
     val testAuthConnector = new TestAuthConnector

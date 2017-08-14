@@ -22,15 +22,17 @@ import org.scalatest.mock.MockitoSugar
 import org.scalatest.{Matchers, WordSpecLike}
 import play.api.libs.ws.WSResponse
 import play.api.test.Helpers._
-import uk.gov.hmrc.play.http.HeaderCarrier
+import uk.gov.hmrc.http.{HeaderCarrier, HttpReads, HttpResponse}
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext.Implicits.global
 
 class AuthConnectorSpec extends WordSpecLike with Matchers with MockitoSugar with ScalaFutures {
   val stubAuthConnector = new AuthConnector {
     override def authBaseUrl = ???
 
-    override protected def callAuth(url: String)(implicit hc: HeaderCarrier): Future[WSResponse] = ???
+    override def GET[A](url: String)(implicit rds: HttpReads[A], hc: HeaderCarrier, ec: ExecutionContext): Future[A] = ???
+    override def GET[A](url: String, queryParams: Seq[(String, String)])(implicit rds: HttpReads[A], hc: HeaderCarrier, ec: ExecutionContext): Future[A] = ???
   }
 
 
@@ -79,52 +81,58 @@ class AuthConnectorSpec extends WordSpecLike with Matchers with MockitoSugar wit
   private trait SetupForAuthorisation {
     val resourceToAuthorise = RegimeAndIdResourceToAuthorise(HttpVerb("GET"), Regime("foo"), AccountId("testid"))
 
-    val authResponse : WSResponse = mock[WSResponse]
+    val authResponse : HttpResponse = mock[HttpResponse]
     val authConnector = new AuthConnector {
 
       override def authBaseUrl = "authBase"
 
-      override protected def callAuth(url: String)(implicit hc: HeaderCarrier): Future[WSResponse] = {
-        Future.successful(authResponse)
+      override def GET[A](url: String)(implicit rds: HttpReads[A], hc: HeaderCarrier, ec: ExecutionContext): Future[A] = {
+        Future.successful(authResponse.asInstanceOf[A])
       }
+
+      override def GET[A](url: String, queryParams: Seq[(String, String)])(implicit rds: HttpReads[A], hc: HeaderCarrier, ec: ExecutionContext): Future[A] = ???
     }
 
   }
 
   "AuthConnector.authorise" should {
+    implicit def hc = HeaderCarrier()
+
     val authConnector = new AuthConnector {
       var calledUrl: Option[String] = None
 
       override def authBaseUrl = "authBase"
 
-      override protected def callAuth(url: String)(implicit hc: HeaderCarrier): Future[WSResponse] = {
+      override def GET[A](url: String)(implicit rds: HttpReads[A], hc: HeaderCarrier, ec: ExecutionContext): Future[A] = {
         calledUrl = Some(url)
         Future.failed(new Exception(""))
       }
+
+      override def GET[A](url: String, queryParams: Seq[(String, String)])(implicit rds: HttpReads[A], hc: HeaderCarrier, ec: ExecutionContext): Future[A] = ???
     }
 
     "invoke callAuth with accountId" in {
       val resourceToAuthorise = RegimeAndIdResourceToAuthorise(HttpVerb("GET"), Regime("foo"), AccountId("testid"))
-      authConnector.authorise(resourceToAuthorise, AuthRequestParameters(confidenceLevel))(new HeaderCarrier)
+      authConnector.authorise(resourceToAuthorise, AuthRequestParameters(confidenceLevel))
       authConnector.calledUrl shouldBe Some(s"authBase/authorise/read/foo/testid?confidenceLevel=$confidenceLevel")
     }
 
     "invoke callAuth with accountId and privileged access" in {
       val resourceToAuthorise = RegimeAndIdResourceToAuthorise(HttpVerb("GET"), Regime("foo"), AccountId("testid"))
-      authConnector.authorise(resourceToAuthorise, AuthRequestParameters(confidenceLevel, privilegedAccess = Some("foo")))(new HeaderCarrier)
+      authConnector.authorise(resourceToAuthorise, AuthRequestParameters(confidenceLevel, privilegedAccess = Some("foo")))
       authConnector.calledUrl shouldBe Some(s"authBase/authorise/read/foo/testid?confidenceLevel=$confidenceLevel&privilegedAccess=foo")
     }
 
     "invoke callAuth without accountId" in {
       val resourceToAuthorise = RegimeResourceToAuthorise(HttpVerb("GET"), Regime("foo"))
-      authConnector.authorise(resourceToAuthorise, AuthRequestParameters(confidenceLevel))(new HeaderCarrier)
+      authConnector.authorise(resourceToAuthorise, AuthRequestParameters(confidenceLevel))
       authConnector.calledUrl shouldBe Some(s"authBase/authorise/read/foo?confidenceLevel=$confidenceLevel")
     }
 
     "return auth result with the headers" in new SetupForAuthorisation {
       when(authResponse.status).thenReturn(200)
       when(authResponse.allHeaders).thenReturn(Map("a-header" -> Seq("a-value")))
-      val result = authConnector.authorise(resourceToAuthorise, AuthRequestParameters(confidenceLevel))(new HeaderCarrier)
+      val result = authConnector.authorise(resourceToAuthorise, AuthRequestParameters(confidenceLevel))
       status(result) shouldBe 200
       result.futureValue.header.headers("a-header") shouldBe "a-value"
     }

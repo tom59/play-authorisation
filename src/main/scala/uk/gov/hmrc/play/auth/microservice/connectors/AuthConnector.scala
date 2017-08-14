@@ -19,13 +19,10 @@ package uk.gov.hmrc.play.auth.microservice.connectors
 import play.api.http.HttpEntity
 import play.api.libs.iteratee.Enumerator
 import play.api.libs.json._
-import play.api.libs.ws.WSResponse
 import play.api.mvc.{ResponseHeader, Result}
-import uk.gov.hmrc.play.http.HeaderCarrier
-import uk.gov.hmrc.play.connectors.{Connector, PlayWSRequestBuilder}
-import uk.gov.hmrc.play.http.logging.ConnectionTracing
+import uk.gov.hmrc.http.{CoreGet, HeaderCarrier, HttpResponse}
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 case class HttpVerb(method: String) extends AnyVal
@@ -121,22 +118,16 @@ case class AuthRequestParameters(confidenceLevel: ConfidenceLevel, agentRoleRequ
   }
 }
 
-trait AuthConnector extends PlayWSRequestBuilder with ConnectionTracing {
-  import uk.gov.hmrc.play.http.logging.MdcLoggingExecutionContext._
-
+trait AuthConnector extends CoreGet {
   def authBaseUrl: String
 
-  def authorise(resource: ResourceToAuthorise, authRequestParameters: AuthRequestParameters)(implicit hc: HeaderCarrier): Future[Result] = {
+  def authorise(resource: ResourceToAuthorise, authRequestParameters: AuthRequestParameters)(implicit hc: HeaderCarrier, ec: ExecutionContext): Future[Result] = {
     val url = resource.buildUrl(authBaseUrl, authRequestParameters)
-    callAuth(url) map { response =>
+    GET[HttpResponse](url) map { response =>
       val headers = response.allHeaders map {
         h => (h._1, h._2.head)
       }
       Result(ResponseHeader(response.status, headers), HttpEntity.NoEntity)
     }
-  }
-
-  protected def callAuth(url: String)(implicit hc: HeaderCarrier): Future[WSResponse] = withTracing("GET", url) {
-    buildRequest(url).get()
   }
 }

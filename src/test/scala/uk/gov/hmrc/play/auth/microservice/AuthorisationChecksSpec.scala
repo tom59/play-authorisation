@@ -16,19 +16,15 @@
 
 package uk.gov.hmrc.play.auth.microservice
 
-import java.util.concurrent.TimeUnit
-
-import org.scalatest.{WordSpecLike, Matchers => MatchersResults}
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.time.Seconds
+import org.scalatest.{WordSpecLike, Matchers => MatchersResults}
 import play.api.mvc.{Result, Results}
 import play.api.test.Helpers._
+import uk.gov.hmrc.http.{HeaderCarrier, HttpReads}
 import uk.gov.hmrc.play.auth.microservice.connectors.{AuthConnector, AuthRequestParameters, ConfidenceLevel, ResourceToAuthorise}
-import uk.gov.hmrc.play.http.HeaderCarrier
 
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{ExecutionContext, Future}
 
 class AuthorisationChecksSpec extends WordSpecLike with MatchersResults with ScalaFutures  {
 
@@ -36,21 +32,22 @@ class AuthorisationChecksSpec extends WordSpecLike with MatchersResults with Sca
 
     def connectorResult: Result = Results.Ok
 
-
     class TestAuthConnector extends AuthConnector {
       var capture: Option[String] = None
 
       override def authBaseUrl = "authBaseUrl"
 
-      override def authorise(resource: ResourceToAuthorise, authRequestParameters: AuthRequestParameters)(implicit hc: HeaderCarrier): Future[Result] = {
+      override def authorise(resource: ResourceToAuthorise, authRequestParameters: AuthRequestParameters)(implicit hc: HeaderCarrier, ec: ExecutionContext): Future[Result] = {
         this.capture = Some(resource.buildUrl(authBaseUrl, authRequestParameters))
         Future.successful(connectorResult)
       }
+
+      override def GET[A](url: String)(implicit rds: HttpReads[A], hc: HeaderCarrier, ec: ExecutionContext): Future[A] = ???
+      override def GET[A](url: String, queryParams: Seq[(String, String)])(implicit rds: HttpReads[A], hc: HeaderCarrier, ec: ExecutionContext): Future[A] = ???
     }
 
     val testAuthConnector = new TestAuthConnector
     def authConnector: AuthConnector = testAuthConnector
-
   }
 
   "AuthorisationChecks.isAuthorisedFor" should {
@@ -64,7 +61,6 @@ class AuthorisationChecksSpec extends WordSpecLike with MatchersResults with Sca
 
     }
 
-
     "invoke auth authorise end-point for enrolments with the passed in CL" in new Setup  {
 
       implicit val headerCarrier = HeaderCarrier()
@@ -73,7 +69,5 @@ class AuthorisationChecksSpec extends WordSpecLike with MatchersResults with Sca
       testAuthConnector.capture shouldBe Some("authBaseUrl/authorise/enrolment/fifa?confidenceLevel=200")
 
     }
-
   }
-
 }
