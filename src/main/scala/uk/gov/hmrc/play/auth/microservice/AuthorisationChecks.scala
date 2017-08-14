@@ -16,21 +16,15 @@
 
 package uk.gov.hmrc.play.auth.microservice
 
-import play.api.mvc.Results
+import uk.gov.hmrc.http.HeaderCarrier
 import uk.gov.hmrc.play.auth.microservice.connectors.{AuthConnector, AuthRequestParameters, ConfidenceLevel, EnrolmentToAuthorise}
-import uk.gov.hmrc.play.http.HeaderCarrier
-import scala.concurrent.ExecutionContext.Implicits.global
 
-import scala.concurrent.Future
-
+import scala.concurrent.ExecutionContext
 
 trait AuthorisationChecks {
-
   def authConnector: AuthConnector
 
-
-  def isAuthorisedFor(enrolment: String, confidenceLevel: ConfidenceLevel = ConfidenceLevel.L50)(implicit headerCarrier: HeaderCarrier) = {
+  def isAuthorisedFor(enrolment: String, confidenceLevel: ConfidenceLevel = ConfidenceLevel.L50)(implicit headerCarrier: HeaderCarrier, ec: ExecutionContext) = {
        authConnector.authorise(EnrolmentToAuthorise(enrolment),AuthRequestParameters(confidenceLevel,None,None))
   }
-
 }

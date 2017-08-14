@@ -18,14 +18,13 @@ package uk.gov.hmrc.play.auth.microservice.filters
 
 import play.Routes
 import play.api.mvc._
-import uk.gov.hmrc.play.http.HeaderCarrier
+import uk.gov.hmrc.http.{HeaderCarrier, HeaderNames}
+import uk.gov.hmrc.play.HeaderCarrierConverter
 import uk.gov.hmrc.play.auth.controllers.{AuthConfig, AuthParamsControllerConfig}
 import uk.gov.hmrc.play.auth.microservice.connectors._
-import uk.gov.hmrc.play.http.HeaderNames
-import uk.gov.hmrc.play.http.logging.LoggingDetails
-import uk.gov.hmrc.play.http.logging.MdcLoggingExecutionContext._
 
 import scala.concurrent.Future
+import uk.gov.hmrc.play.http.logging.MdcLoggingExecutionContext._
 
 trait AuthorisationFilter extends Filter {
 
@@ -45,7 +44,7 @@ trait AuthorisationFilter extends Filter {
     }
 
   def apply(next: (RequestHeader) => Future[Result])(rh: RequestHeader): Future[Result] = {
-    implicit val hc = HeaderCarrier.fromHeadersAndSession(rh.headers)
+    implicit val hc = HeaderCarrierConverter.fromHeadersAndSession(rh.headers)
 
     authConfig(rh) match {
       case Some(authConfig) => isAuthorised(rh, authConfig).flatMap { result =>
@@ -66,7 +65,7 @@ trait AuthorisationFilter extends Filter {
     }
   }
 
-  private implicit def sequence[T](of: Option[Future[T]])(implicit ld: LoggingDetails): Future[Option[T]] =
+  private implicit def sequence[T](of: Option[Future[T]])(implicit hc: HeaderCarrier): Future[Option[T]] =
     of.map(f => f.map(Option(_))).getOrElse(Future.successful(None))
 
   private def isAuthorised(rh: RequestHeader, authConfig: AuthConfig)(implicit hc: HeaderCarrier): Future[Result] = {
