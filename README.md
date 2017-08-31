@@ -41,6 +41,22 @@ Example
 }
 ```
 
+## Auth filter with request parameter
+The following configuration will validate the nino or sautr for this URL http://myservice.protected.mdtp/?nino=NINO
+```json
+{
+    controllers {
+      YourController{
+        authParams = {
+          mode = "identityByRequestParam"
+          account = "paye"
+          confidenceLevel=100
+      }
+    }
+  }
+}
+```
+
 ## Installing
 
 Include the following dependency in your SBT build
