@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 HM Revenue & Customs
+ * Copyright 2017 HM Revenue & Customs
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package uk.gov.hmrc.play.auth.microservice.filters
 
 import play.Routes
 import play.api.mvc._
+import uk.gov.hmrc.play.auth.controllers
 import uk.gov.hmrc.http.{HeaderCarrier, HeaderNames}
 import uk.gov.hmrc.play.HeaderCarrierConverter
 import uk.gov.hmrc.play.auth.controllers.{AuthConfig, AuthParamsControllerConfig}
@@ -72,21 +73,35 @@ trait AuthorisationFilter extends Filter {
     val result: Future[Option[Result]] =
       for {
         verb <- rh.tags.get(Routes.ROUTE_VERB).map(HttpVerb)
-        resource <- extractResource(rh.path, verb, authConfig)
+        resource <- extractResource(rh, verb, authConfig)
 
       } yield authConnector.authorise(resource, AuthRequestParameters(authConfig.confidenceLevel,authConfig.agentRole, authConfig.delegatedAuthRule, authConfig.privilegedAccess))
 
     result.map(_.getOrElse(Results.Unauthorized))
   }
 
-  def extractResource(pathString: String, verb: HttpVerb, authConfig: AuthConfig): Option[ResourceToAuthorise] =
+  def extractResource(rh: RequestHeader, verb: HttpVerb, authConfig: AuthConfig): Option[ResourceToAuthorise] =
     authConfig.mode match {
-      case "identity" => extractIdentityResource(pathString, verb, authConfig)
-      case "passcode" => extractPasscodeResource(pathString, verb, authConfig)
-      case "enrolment" => extractEnrolmentResource(pathString, verb, authConfig)
+      case "identity" => extractIdentityResourceFromPath(rh.path, verb, authConfig)
+      case "identityByRequestParam" => extractIdentityResourceFromQueryParameters(rh.queryString, verb, authConfig)
+      case "passcode" => extractPasscodeResource(rh.path, verb, authConfig)
+      case "enrolment" => extractEnrolmentResource(rh.path, verb, authConfig)
     }
 
-  private def extractIdentityResource(pathString: String, verb: HttpVerb, authConfig: AuthConfig): Option[ResourceToAuthorise] = {
+  private def extractIdentityResourceFromQueryParameters(queryParameters: Map[String, Seq[String]], verb: HttpVerb, authConfig: AuthConfig): Option[ResourceToAuthorise] = {
+    val authConfigRegime: Option[controllers.Regime] = authConfig.account flatMap (account => controllers.Regime.allRegimes.find(_.accountName == account))
+
+    for {
+      regime <- authConfigRegime
+      identifierValues <- queryParameters.get(regime.identifier)
+      resource <- identifierValues match {
+        case identifierValue :: Nil => Some(RegimeAndIdResourceToAuthorise(verb, Regime(authConfig.servicePrefix + regime.accountName), AccountId(identifierValue)))
+        case _ => None
+      }
+    } yield resource
+  }
+
+  private def extractIdentityResourceFromPath(pathString: String, verb: HttpVerb, authConfig: AuthConfig): Option[ResourceToAuthorise] = {
 
     pathString match {
       case authConfig.pattern(urlAccount, id) =>
